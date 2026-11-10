@@ -44,6 +44,29 @@ class BankingDataSource {
   }
 
   /// Récupère les comptes de type 'dépense' (pour commissions et frais)
+  /// Récupère les comptes de type 'recette' et comptes de vente (classe 7 ou 10)
+  Future<List<Compte>> getIncomeAndSalesAccounts() async {
+    _ensureConnected();
+    final rows = await db.connection.connection!.execute(
+      "SELECT ID, CODE, LIBELLE, COMPTE_FR, NIVEAU, BG, BD, IS_ACTIVE, USER_ID, TYPE_COMPTE "
+      "FROM COMPTES "
+      "WHERE (TYPE_COMPTE IN ('recette', 'Recette/Dépance', 'Recette/D\uFFFDpance', 'recette_depense') OR CODE STARTING WITH '7' OR CODE STARTING WITH '10') AND IS_ACTIVE = 'O' "
+      "ORDER BY CODE",
+    );
+    return rows.map((r) => Compte(
+      id: r['ID'].toString(),
+      code: r['CODE'].toString().trim(),
+      libelle: cleanMojibake(r['LIBELLE'].toString().trim()),
+      compteFr: r['COMPTE_FR'] != null ? cleanMojibake(r['COMPTE_FR'].toString().trim()) : null,
+      niveau: int.tryParse(r['NIVEAU']?.toString().trim() ?? '1') ?? 1,
+      bg: int.tryParse(r['BG']?.toString().trim() ?? '0') ?? 0,
+      bd: int.tryParse(r['BD']?.toString().trim() ?? '1') ?? 1,
+      active: true,
+      userId: r['USER_ID']?.toString().trim(),
+      typeCompte: CompteType.fromString(r['TYPE_COMPTE']?.toString()) ?? CompteType.recette,
+    )).toList();
+  }
+
   Future<List<Compte>> getExpenseAccounts() async {
     _ensureConnected();
     final rows = await db.connection.connection!.execute(
@@ -263,20 +286,24 @@ class BankingDataSource {
     required List<BankTransactionFee> fees,
   }) async {
     _ensureConnected();
-    await db.connection.connection!.execute(
-      '''
-      INSERT INTO REMISES_CHEQUES (
-        ID, BORDEREAU_NUMBER, DATE_REMISE, BANK_COMPTE_ID,
-        TOTAL_AMOUNT, CHEQUES_COUNT, STATUS, NOTES, CREATED_BY
-      ) VALUES (
-        '${remise.id}', '${remise.bordereauNumber.replaceAll("'", "''")}',
-        '${toSqlDateTime(remise.dateRemise)}', '${remise.bankCompteId}',
-        ${remise.totalAmount}, ${remise.chequesCount}, 'BROUILLON',
-        ${remise.notes != null ? "'${remise.notes!.replaceAll("'", "''")}'" : "NULL"},
-        '${remise.createdBy}'
-      )
-      ''',
-    );
+          final sourceCompteSql = (remise.sourceCompteId != null && remise.sourceCompteId!.isNotEmpty)
+          ? "'${remise.sourceCompteId}'"
+          : "NULL";
+
+      await db.connection.connection!.execute(
+        '''
+        INSERT INTO REMISES_CHEQUES (
+          ID, BORDEREAU_NUMBER, DATE_REMISE, BANK_COMPTE_ID, SOURCE_COMPTE_ID,
+          TOTAL_AMOUNT, CHEQUES_COUNT, STATUS, NOTES, CREATED_BY
+        ) VALUES (
+          '${remise.id}', '${remise.bordereauNumber.replaceAll("'", "''")}',
+          '${toSqlDateTime(remise.dateRemise)}', '${remise.bankCompteId}', $sourceCompteSql,
+          ${remise.totalAmount}, ${remise.chequesCount}, 'BROUILLON',
+          ${remise.notes != null ? "'${remise.notes!.replaceAll("'", "''")}'" : "NULL"},
+          '${remise.createdBy}'
+        )
+        ''',
+      );
 
     for (final chqId in chequeIds) {
       await db.connection.connection!.execute(
@@ -291,6 +318,7 @@ class BankingDataSource {
     required String remiseId,
     required String validatedByUserId,
     required String bankCompteId,
+    String? bankCompteSourceId,
     required double totalAmount,
     required String bordereauNumber,
     required List<BankTransactionFee> fees,
@@ -299,18 +327,52 @@ class BankingDataSource {
     final movId = Uuid.v4();
     final now = DateTime.now();
 
-    // Versement Trésorerie: Entrée sur le compte bancaire choisi dans COMPTES
+    // 1. Déterminer le compte source de contrepartie (Compte Vente / Recette)
+    // Priorité : paramètre explicite > SOURCE_COMPTE_ID de la remise > compte du chèque/règlement > compte 1001 Vente par défaut
+    String sourceCompteId = 'e953f50c-b365-4dd7-a8ce-50972d9c2b39';
+    if (bankCompteSourceId != null && bankCompteSourceId.trim().isNotEmpty) {
+      sourceCompteId = bankCompteSourceId.trim();
+    } else {
+      final remiseRows = await db.connection.connection!.execute(
+        "SELECT SOURCE_COMPTE_ID FROM REMISES_CHEQUES WHERE ID = '$remiseId'"
+      );
+      final rSrc = remiseRows.isNotEmpty ? remiseRows.first['SOURCE_COMPTE_ID']?.toString().trim() : null;
+      if (rSrc != null && rSrc.isNotEmpty) {
+        sourceCompteId = rSrc;
+      } else {
+        final chqRows = await db.connection.connection!.execute('''
+          SELECT FIRST 1 
+            COALESCE(r.COMPTE_CONTREPARTIE_ID, fv.COMPTE_ID) as SOURCE_ID
+          FROM CHEQUES c
+          LEFT JOIN REGLEMENT r ON r.ID = c.REGLEMENT_ID
+          LEFT JOIN FACTURE_VENTE fv ON fv.ID = c.FACTURE_VENTE_ID
+          WHERE c.REMISE_ID = '$remiseId' AND (r.COMPTE_CONTREPARTIE_ID IS NOT NULL OR fv.COMPTE_ID IS NOT NULL)
+        ''');
+        if (chqRows.isNotEmpty && chqRows.first['SOURCE_ID'] != null) {
+          final sId = chqRows.first['SOURCE_ID'].toString().trim();
+          if (sId.isNotEmpty) sourceCompteId = sId;
+        }
+      }
+    }
+
+    // Versement Trésorerie:
+    // COMPTE_SOURCE_ID = Compte Vente / Recette client d'où provient le chèque
+    // COMPTE_DEST_ID = Compte Banque sélectionné où l'argent entre
+    // ORIGINE_MODULE = 'REMISE_CHEQUE'
     await db.connection.connection!.execute(
       '''
       INSERT INTO MOVEMENTS_TRISOIR (
-        ID, DATE_MOV, COMPTE_SOURCE_ID, COMPTE_DEST_ID, MONTANT, DESIGNATION, USER_ID
+        ID, DATE_MOV, COMPTE_SOURCE_ID, COMPTE_DEST_ID, MONTANT, DESIGNATION, USER_ID,
+        MODE_PAIEMENT, ORIGINE_MODULE
       ) VALUES (
         '$movId', '${toSqlDateTime(now)}',
-        '$bankCompteId',
+        '$sourceCompteId',
         '$bankCompteId',
         $totalAmount,
         'Versement chèques - Bordereau $bordereauNumber',
-        '$validatedByUserId'
+        '$validatedByUserId',
+        'Chèque',
+        'REMISE_CHEQUE'
       )
       ''',
     );
@@ -334,6 +396,35 @@ class BankingDataSource {
       await db.connection.connection!.execute(
         "UPDATE BANK_TRANSACTION_FEES SET MOVEMENT_TRISOR_ID = '$movId' WHERE ID = '${f.id}'",
       );
+
+      // Si le montant du frais est > 0, comptabiliser la retenue de charge bancaire dans MOVEMENTS_TRISOIR
+      // Source: bankCompteId (argent prélevé de la banque)
+      // Destination: f.chargeCompteId (compte de charge 614xx Commission ou TVA)
+      final feeAmount = f.finalAmount > 0 ? f.finalAmount : f.computedAmount;
+      if (feeAmount > 0) {
+        final feeMovId = Uuid.v4();
+        final feeLabel = (f.ruleName != null && f.ruleName!.isNotEmpty)
+            ? 'Frais bancaires : ${f.ruleName} (Bordereau $bordereauNumber)'
+            : 'Frais bancaires - Bordereau $bordereauNumber';
+
+        await db.connection.connection!.execute(
+          '''
+          INSERT INTO MOVEMENTS_TRISOIR (
+            ID, DATE_MOV, COMPTE_SOURCE_ID, COMPTE_DEST_ID, MONTANT, DESIGNATION, USER_ID,
+            MODE_PAIEMENT, ORIGINE_MODULE
+          ) VALUES (
+            '$feeMovId', '${toSqlDateTime(now)}',
+            '$bankCompteId',
+            '${f.chargeCompteId}',
+            $feeAmount,
+            '${feeLabel.replaceAll("'", "''")}',
+            '$validatedByUserId',
+            'Prélèvement frais',
+            'REMISE_CHEQUE_FRAIS'
+          )
+          ''',
+        );
+      }
     }
 
     await db.connection.connection!.execute(
@@ -355,21 +446,57 @@ class BankingDataSource {
     _ensureConnected();
     final now = DateTime.now();
 
+    // 1. Récupérer le MOVEMENT_TRISOR_ID associé avant annulation
+    final remiseRows = await db.connection.connection!.execute(
+      "SELECT MOVEMENT_TRISOR_ID FROM REMISES_CHEQUES WHERE ID = '$remiseId'"
+    );
+    final movId = remiseRows.isNotEmpty ? remiseRows.first['MOVEMENT_TRISOR_ID']?.toString().trim() : null;
+
+    // 2. Replacer les chèques en portefeuille
     await db.connection.connection!.execute(
       "UPDATE CHEQUES SET REMISE_ID = NULL, STATUS = 'EN_PORTEFEUILLE' WHERE REMISE_ID = '$remiseId'",
     );
 
+    // 3. Dissocier les frais bancaires du mouvement trésorerie
+    if (movId != null && movId.isNotEmpty) {
+      await db.connection.connection!.execute(
+        "UPDATE BANK_TRANSACTION_FEES SET MOVEMENT_TRISOR_ID = NULL WHERE MOVEMENT_TRISOR_ID = '$movId'",
+      );
+    }
+
+    // 4. Mettre à jour le statut du bordereau à ANNULEE et dissocier le mouvement
     await db.connection.connection!.execute(
       '''
       UPDATE REMISES_CHEQUES 
       SET STATUS = 'ANNULEE',
           CANCELLED_BY = '$cancelledByUserId',
-          CANCELLED_AT = '${now.toIso8601String()}',
+          CANCELLED_AT = '${toSqlDateTime(now)}',
+          MOVEMENT_TRISOR_ID = NULL,
           NOTES = COALESCE(NOTES, '') || ' [Annulé: ${reason.replaceAll("'", "''")}]'
       WHERE ID = '$remiseId'
       ''',
     );
 
+    // 5. Supprimer le mouvement de trésorerie principal et les écritures de frais associées
+    if (movId != null && movId.isNotEmpty) {
+      await db.connection.connection!.execute(
+        "DELETE FROM MOVEMENTS_TRISOIR WHERE ID = '$movId'",
+      );
+    }
+    // Supprimer également les écritures de frais de ce bordereau
+    final remiseInfo = await db.connection.connection!.execute(
+      "SELECT BORDEREAU_NUMBER FROM REMISES_CHEQUES WHERE ID = '$remiseId'"
+    );
+    if (remiseInfo.isNotEmpty) {
+      final bNum = remiseInfo.first['BORDEREAU_NUMBER']?.toString().trim();
+      if (bNum != null && bNum.isNotEmpty) {
+        await db.connection.connection!.execute(
+          "DELETE FROM MOVEMENTS_TRISOIR WHERE ORIGINE_MODULE = 'REMISE_CHEQUE_FRAIS' AND DESIGNATION LIKE '%Bordereau ${bNum.replaceAll("'", "''")}%'",
+        );
+      }
+    }
+
+    // 6. Historique d'audit
     await db.connection.connection!.execute(
       '''
       INSERT INTO BANK_AUDIT_LOGS (ID, USER_ID, ACTION, ENTITY_NAME, ENTITY_ID, DETAILS)
@@ -378,6 +505,32 @@ class BankingDataSource {
         'Annulation de la remise: ${reason.replaceAll("'", "''")}'
       )
       ''',
+    );
+  }
+
+  /// Supprime définitivement un bordereau (uniquement autorisé pour les brouillons)
+  Future<void> deleteDraftRemise(String remiseId) async {
+    _ensureConnected();
+    final rows = await db.connection.connection!.execute(
+      "SELECT STATUS FROM REMISES_CHEQUES WHERE ID = '$remiseId'"
+    );
+    if (rows.isEmpty) return;
+    final status = rows.first['STATUS']?.toString().trim();
+    if (status != 'BROUILLON') {
+      throw Exception('Seuls les bordereaux en brouillon peuvent être supprimés.');
+    }
+
+    // 1. Replacer les chèques en portefeuille
+    await db.connection.connection!.execute(
+      "UPDATE CHEQUES SET REMISE_ID = NULL, STATUS = 'EN_PORTEFEUILLE' WHERE REMISE_ID = '$remiseId'",
+    );
+    // 2. Supprimer les frais calculés
+    await db.connection.connection!.execute(
+      "DELETE FROM BANK_TRANSACTION_FEES WHERE REMISE_ID = '$remiseId'",
+    );
+    // 3. Supprimer le bordereau
+    await db.connection.connection!.execute(
+      "DELETE FROM REMISES_CHEQUES WHERE ID = '$remiseId'",
     );
   }
 }

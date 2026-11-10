@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../../app/theme.dart';
 import '../../../../core/database/database.dart';
 import '../../../../core/security/session.dart';
 import '../../../../core/services/bank_fee_calculator.dart';
@@ -24,6 +23,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
   List<RemiseCheque> _remises = [];
   List<Cheque> _portfolioCheques = [];
   List<Compte> _bankAccounts = [];
+  List<Compte> _incomeAccounts = [];
   List<BankRule> _bankRules = [];
   List<TransactionTypeCatalog> _txTypes = [];
 
@@ -54,6 +54,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
       final remises = await _repository.getRemises();
       final portfolio = await _repository.getChequesInPortfolio();
       final bankAccounts = await _repository.getBankAccounts();
+      final incomeAccounts = await _repository.getIncomeAndSalesAccounts();
       final rules = await _repository.getBankRules();
       final txTypes = await _repository.getTransactionTypes();
 
@@ -62,6 +63,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
         _remises = remises;
         _portfolioCheques = portfolio;
         _bankAccounts = bankAccounts;
+        _incomeAccounts = incomeAccounts;
         _bankRules = rules;
         _txTypes = txTypes;
         _loading = false;
@@ -85,10 +87,15 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
 
     final bordereauCtrl = TextEditingController(text: 'BR-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}');
     String selectedBankCompteId = _bankAccounts.first.id;
+    String? selectedSourceCompteId = _incomeAccounts.any((a) => a.id == 'e953f50c-b365-4dd7-a8ce-50972d9c2b39')
+        ? 'e953f50c-b365-4dd7-a8ce-50972d9c2b39'
+        : (_incomeAccounts.isNotEmpty ? _incomeAccounts.first.id : null);
     final Set<String> selectedChequeIds = {};
     List<BankTransactionFee> computedFees = [];
 
     final txMap = {for (final tx in _txTypes) tx.code: tx.id};
+    bool isSavingDraft = false;
+    String? draftError;
 
     void recomputeFees(StateSetter setModalState) {
       final selectedCheques = _portfolioCheques.where((c) => selectedChequeIds.contains(c.id)).toList();
@@ -136,23 +143,42 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
                   ),
                   const Divider(height: 20),
 
-                  // Header : Bordereau & Banque
+                  // Header : Bordereau, Compte Source & Compte Banque Destinataire
                   Row(
                     children: [
                       Expanded(
+                        flex: 3,
                         child: TextField(
                           controller: bordereauCtrl,
                           decoration: const InputDecoration(labelText: 'N° Bordereau *', isDense: true, border: OutlineInputBorder()),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 12),
                       Expanded(
+                        flex: 4,
+                        child: DropdownButtonFormField<String>(
+                          value: selectedSourceCompteId,
+                          decoration: const InputDecoration(labelText: 'Compte Source (Vente / Recette) *', isDense: true, border: OutlineInputBorder()),
+                          items: _incomeAccounts.map((a) => DropdownMenuItem(
+                            value: a.id,
+                            child: Text('${a.code} - ${a.libelle}', overflow: TextOverflow.ellipsis),
+                          )).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setModalState(() => selectedSourceCompteId = val);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 4,
                         child: DropdownButtonFormField<String>(
                           value: selectedBankCompteId,
-                          decoration: const InputDecoration(labelText: 'Compte Banque destinataire *', isDense: true, border: OutlineInputBorder()),
+                          decoration: const InputDecoration(labelText: 'Compte Banque (Destination) *', isDense: true, border: OutlineInputBorder()),
                           items: _bankAccounts.map((b) => DropdownMenuItem(
                             value: b.id,
-                            child: Text('${b.code} - ${b.libelle}'),
+                            child: Text('${b.code} - ${b.libelle}', overflow: TextOverflow.ellipsis),
                           )).toList(),
                           onChanged: (val) {
                             if (val != null) {
@@ -180,7 +206,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
                           ? const Center(child: Text('Aucun chèque en portefeuille pour le moment.', style: TextStyle(color: Color(0xFF64748B))))
                           : ListView.separated(
                               itemCount: _portfolioCheques.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              separatorBuilder: (_, unused) => const Divider(height: 1),
                               itemBuilder: (context, index) {
                                 final chq = _portfolioCheques[index];
                                 final isSelected = selectedChequeIds.contains(chq.id);
@@ -201,7 +227,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
                                     children: [
                                       Text('Chèque N° ${chq.chequeNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                       const SizedBox(width: 8),
-                                      Text('(${chq.draweeBankName})', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                                      Text('(${chq.draweeBankName.isNotEmpty ? chq.draweeBankName : (chq.draweeBankCompteLibelle ?? "N/A")})', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                                     ],
                                   ),
                                   subtitle: Text('Client: ${chq.clientNom ?? "N/A"} - Facture: ${chq.numFacture ?? "N/A"}', style: const TextStyle(fontSize: 12)),
@@ -264,34 +290,67 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
                     children: [
                       TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
                       const SizedBox(width: 12),
+                      if (draftError != null)
+                        Expanded(
+                          child: Text(
+                            draftError!,
+                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ElevatedButton(
-                        onPressed: selectedCheques.isEmpty
+                        onPressed: (selectedCheques.isEmpty || isSavingDraft)
                             ? null
                             : () async {
-                                final remise = RemiseCheque(
-                                  id: Uuid.v4(),
-                                  bordereauNumber: bordereauCtrl.text.trim(),
-                                  dateRemise: DateTime.now(),
-                                  bankCompteId: selectedBankCompteId,
-                                  totalAmount: totalAmount,
-                                  chequesCount: selectedCheques.length,
-                                  createdBy: Session.user?.id ?? '123e4567-e89b-12d3-a456-426614174000',
-                                );
+                                setModalState(() {
+                                  isSavingDraft = true;
+                                  draftError = null;
+                                });
+                                try {
+                                  final numBordereau = bordereauCtrl.text.trim().isNotEmpty
+                                      ? bordereauCtrl.text.trim()
+                                      : 'BR-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
 
-                                for (final f in computedFees) {
-                                  // Associer l'ID de la remise aux frais
+                                  final remise = RemiseCheque(
+                                    id: Uuid.v4(),
+                                    bordereauNumber: numBordereau,
+                                    dateRemise: DateTime.now(),
+                                    bankCompteId: selectedBankCompteId,
+                                    sourceCompteId: selectedSourceCompteId,
+                                    totalAmount: totalAmount,
+                                    chequesCount: selectedCheques.length,
+                                    createdBy: Session.user?.id ?? '123e4567-e89b-12d3-a456-426614174000',
+                                  );
+
+                                  final feesToSave = computedFees.map((f) => f.copyWith(remiseId: remise.id)).toList();
+
+                                  await _repository.createRemiseDraft(
+                                    remise: remise,
+                                    chequeIds: selectedChequeIds.toList(),
+                                    fees: feesToSave,
+                                  );
+
+                                  if (context.mounted) {
+                                    Navigator.of(context).pop(true);
+                                  }
+                                } catch (e) {
+                                  setModalState(() {
+                                    isSavingDraft = false;
+                                    draftError = 'Erreur lors de l\'enregistrement : $e';
+                                  });
                                 }
-
-                                await _repository.createRemiseDraft(
-                                  remise: remise,
-                                  chequeIds: selectedChequeIds.toList(),
-                                  fees: computedFees,
-                                );
-
-                                if (mounted) Navigator.of(context).pop(true);
                               },
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
-                        child: const Text('Enregistrer le bordereau (Brouillon)'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                        ),
+                        child: isSavingDraft
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text('Enregistrer le bordereau (Brouillon)'),
                       ),
                     ],
                   ),
@@ -334,6 +393,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
         remiseId: remise.id,
         validatedByUserId: Session.user?.id ?? '123e4567-e89b-12d3-a456-426614174000',
         bankCompteId: remise.bankCompteId,
+        bankCompteSourceId: remise.sourceCompteId,
         totalAmount: remise.totalAmount,
         bordereauNumber: remise.bordereauNumber,
         fees: fees,
@@ -344,6 +404,58 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
           const SnackBar(content: Text('Remise validée et comptabilisée.'), backgroundColor: Color(0xFF10B981)),
         );
         _load();
+      }
+    }
+  }
+
+  Future<void> _deleteDraftRemise(RemiseCheque remise) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer le bordereau brouillon ?'),
+        content: Text(
+          'Voulez-vous supprimer définitivement le bordereau brouillon N° ' +
+              remise.bordereauNumber +
+              ' ?\nLes chèques associés resteront intacts dans votre portefeuille.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _repository.deleteDraftRemise(remise.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bordereau brouillon supprimé avec succès.'),
+              backgroundColor: Color(0xFF10B981),
+            ),
+          );
+          _load();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -411,17 +523,18 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
                     Text('Gérez vos bordereaux de remise, les frais déduits et le cycle de vie des chèques', style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
                   ],
                 ),
-                ElevatedButton.icon(
-                  onPressed: _openCreateRemiseDialog,
-                  icon: const Icon(Icons.add_rounded, size: 20),
-                  label: const Text('Nouveau Bordereau', style: TextStyle(fontWeight: FontWeight.w600)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                if (Session.user?.hasCreateRemisesPermission ?? true)
+                  ElevatedButton.icon(
+                    onPressed: _openCreateRemiseDialog,
+                    icon: const Icon(Icons.add_rounded, size: 20),
+                    label: const Text('Nouveau Bordereau', style: TextStyle(fontWeight: FontWeight.w600)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -466,7 +579,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
 
     return ListView.separated(
       itemCount: _remises.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, unused) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final r = _remises[index];
         final isDraft = r.status == RemiseStatus.brouillon;
@@ -520,7 +633,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text('Banque: ${r.bankCompteLabel ?? "N/A"} • ${r.chequesCount} chèque(s)', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                      Text('Source: ${r.sourceCompteLabel ?? "1001 - Vente"} ➔ Banque: ${r.bankCompteLabel ?? "N/A"} • ${r.chequesCount} chèque(s)', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                     ],
                   ),
                 ),
@@ -529,13 +642,21 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B)),
                 ),
                 const SizedBox(width: 20),
-                if (isDraft)
+                if (isDraft && (Session.user?.hasUpdateRemisesPermission ?? true))
                   ElevatedButton(
                     onPressed: () => _validateRemise(r),
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white),
                     child: const Text('Valider'),
                   ),
-                if (isValidated)
+                if (isDraft && (Session.user?.hasDeleteRemisesPermission ?? true)) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                    tooltip: 'Supprimer ce brouillon',
+                    onPressed: () => _deleteDraftRemise(r),
+                  ),
+                ],
+                if (isValidated && (Session.user?.hasDeleteRemisesPermission ?? true))
                   OutlinedButton(
                     onPressed: () => _cancelRemise(r),
                     style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red), foregroundColor: Colors.red),
@@ -556,7 +677,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
 
     return ListView.separated(
       itemCount: _portfolioCheques.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, unused) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final c = _portfolioCheques[index];
         return Card(
@@ -571,7 +692,7 @@ class _RemisesChequesPageState extends State<RemisesChequesPage> with SingleTick
               child: Icon(Icons.receipt_rounded, color: Color(0xFF2563EB)),
             ),
             title: Text('Chèque N° ${c.chequeNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            subtitle: Text('Tiré sur: ${c.draweeBankName} • Client: ${c.clientNom ?? "Client"} • Facture: ${c.numFacture ?? "N/A"}'),
+            subtitle: Text('Tiré sur: ${(c.draweeBankName.isNotEmpty ? c.draweeBankName : (c.draweeBankCompteLibelle ?? "N/A"))} • Client: ${c.clientNom ?? "Client"} • Facture: ${c.numFacture ?? "N/A"}'),
             trailing: Text(
               '${c.montant.toStringAsFixed(2)} DZD',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF047857)),

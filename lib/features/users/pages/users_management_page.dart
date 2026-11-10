@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
-import '../../../../app/theme.dart';
+import '../../../app/theme.dart';
 import '../../../../core/database/database.dart';
 import '../../../../core/security/session.dart';
 import '../../../../data/datasources/finance_datasource.dart';
@@ -89,6 +89,14 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
     bool canViewAccounting = user?.canViewAccounting ?? true;
     bool canValidateTransfert = user?.canValidateTransfert ?? true;
     bool canDeleteBankRules = user?.canDeleteBankRules ?? false;
+    bool canViewCharges = user?.canViewCharges ?? true;
+    bool canCreateCharges = user?.canCreateCharges ?? true;
+    bool canUpdateCharges = user?.canUpdateCharges ?? true;
+    bool canDeleteCharges = user?.canDeleteCharges ?? false;
+    bool canViewRemises = user?.canViewRemises ?? true;
+    bool canCreateRemises = user?.canCreateRemises ?? true;
+    bool canUpdateRemises = user?.canUpdateRemises ?? true;
+    bool canDeleteRemises = user?.canDeleteRemises ?? false;
     Set<String> selectedCaisses = Set.from(user?.assignedCaisseIds ?? []);
 
     final formKey = GlobalKey<FormState>();
@@ -97,7 +105,7 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => DefaultTabController(
-          length: 4,
+          length: 5,
           child: AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             backgroundColor: Colors.white,
@@ -176,6 +184,10 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
                           Tab(
                             icon: Icon(Icons.payments_outlined, size: 18),
                             text: 'Opérations & Trésorerie',
+                          ),
+                          Tab(
+                            icon: Icon(Icons.receipt_long_outlined, size: 18),
+                            text: 'Charges & Remises',
                           ),
                           Tab(
                             icon: Icon(Icons.account_balance_wallet_outlined, size: 18),
@@ -271,6 +283,15 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
                                                   canViewStock = true;
                                                   canViewAccounting = true;
                                                   canValidateTransfert = true;
+                                                  canDeleteBankRules = true;
+                                                  canViewCharges = true;
+                                                  canCreateCharges = true;
+                                                  canUpdateCharges = true;
+                                                  canDeleteCharges = true;
+                                                  canViewRemises = true;
+                                                  canCreateRemises = true;
+                                                  canUpdateRemises = true;
+                                                  canDeleteRemises = true;
                                                 }
                                               });
                                             }
@@ -417,7 +438,127 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
                             ),
                           ),
 
-                          // ================= TAB 3: CAISSES & PLAN COMPTABLE =================
+                          // ================= TAB 3: CHARGES & REMISES CHEQUES =================
+                          SingleChildScrollView(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Charges Card
+                                  FCard(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(14),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Row(
+                                            children: [
+                                              Icon(Icons.request_quote_rounded, color: Color(0xFF2563EB)),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Module : Gestion des Charges (إدارة مصاريف الشركة)',
+                                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF09090B)),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          FCheckbox(
+                                            value: role == 'ADMIN' ? true : canViewCharges,
+                                            enabled: role != 'ADMIN',
+                                            onChange: (v) => setDialogState(() => canViewCharges = v),
+                                            label: const Text('Consulter les charges (Lecture)', style: TextStyle(fontWeight: FontWeight.w600)),
+                                            description: const Text('Accéder à la liste des charges et aux rapports périodiques'),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          FCheckbox(
+                                            value: role == 'ADMIN' ? true : canCreateCharges,
+                                            enabled: role != 'ADMIN',
+                                            onChange: (v) => setDialogState(() => canCreateCharges = v),
+                                            label: const Text('Créer des charges (Ajout)', style: TextStyle(fontWeight: FontWeight.w600)),
+                                            description: const Text('Enregistrer de nouvelles charges simples ou amortissables'),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          FCheckbox(
+                                            value: role == 'ADMIN' ? true : canUpdateCharges,
+                                            enabled: role != 'ADMIN',
+                                            onChange: (v) => setDialogState(() => canUpdateCharges = v),
+                                            label: const Text('Modifier des charges & Enregistrer règlements', style: TextStyle(fontWeight: FontWeight.w600)),
+                                            description: const Text('Modifier les caractéristiques d\'une charge et enregistrer des paiements de tranches'),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          FCheckbox(
+                                            value: role == 'ADMIN' ? true : canDeleteCharges,
+                                            enabled: role != 'ADMIN',
+                                            onChange: (v) => setDialogState(() => canDeleteCharges = v),
+                                            label: const Text('Supprimer des charges', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFDC2626))),
+                                            description: const Text('Supprimer définitivement une charge du système'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Remises Card
+                                  FCard(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(14),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Row(
+                                            children: [
+                                              Icon(Icons.receipt_long_rounded, color: Color(0xFF10B981)),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Module : Remises de Chèques',
+                                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF09090B)),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          FCheckbox(
+                                            value: role == 'ADMIN' ? true : canViewRemises,
+                                            enabled: role != 'ADMIN',
+                                            onChange: (v) => setDialogState(() => canViewRemises = v),
+                                            label: const Text('Consulter les remises (Lecture)', style: TextStyle(fontWeight: FontWeight.w600)),
+                                            description: const Text('Accéder aux bordereaux de remise et au portefeuille de chèques'),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          FCheckbox(
+                                            value: role == 'ADMIN' ? true : canCreateRemises,
+                                            enabled: role != 'ADMIN',
+                                            onChange: (v) => setDialogState(() => canCreateRemises = v),
+                                            label: const Text('Créer des bordereaux de remise (Ajout)', style: TextStyle(fontWeight: FontWeight.w600)),
+                                            description: const Text('Sélectionner des chèques et générer un bordereau en brouillon'),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          FCheckbox(
+                                            value: role == 'ADMIN' ? true : canUpdateRemises,
+                                            enabled: role != 'ADMIN',
+                                            onChange: (v) => setDialogState(() => canUpdateRemises = v),
+                                            label: const Text('Valider les remises en banque (Validation)', style: TextStyle(fontWeight: FontWeight.w600)),
+                                            description: const Text('Valider et comptabiliser les bordereaux de chèques en trésorerie'),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          FCheckbox(
+                                            value: role == 'ADMIN' ? true : canDeleteRemises,
+                                            enabled: role != 'ADMIN',
+                                            onChange: (v) => setDialogState(() => canDeleteRemises = v),
+                                            label: const Text('Annuler / Supprimer des remises', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFDC2626))),
+                                            description: const Text('Annuler un bordereau validé ou supprimer définitivement un bordereau brouillon'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // ================= TAB 4: CAISSES & PLAN COMPTABLE =================
                           SingleChildScrollView(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -679,6 +820,14 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
           canViewAccounting: role == 'ADMIN' ? true : canViewAccounting,
           canValidateTransfert: role == 'ADMIN' ? true : canValidateTransfert,
           canDeleteBankRules: role == 'ADMIN' ? true : canDeleteBankRules,
+          canViewCharges: role == 'ADMIN' ? true : canViewCharges,
+          canCreateCharges: role == 'ADMIN' ? true : canCreateCharges,
+          canUpdateCharges: role == 'ADMIN' ? true : canUpdateCharges,
+          canDeleteCharges: role == 'ADMIN' ? true : canDeleteCharges,
+          canViewRemises: role == 'ADMIN' ? true : canViewRemises,
+          canCreateRemises: role == 'ADMIN' ? true : canCreateRemises,
+          canUpdateRemises: role == 'ADMIN' ? true : canUpdateRemises,
+          canDeleteRemises: role == 'ADMIN' ? true : canDeleteRemises,
           assignedCaisseIds: selectedCaisses.toList(),
         );
       } else {
@@ -701,6 +850,14 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
           canViewAccounting: role == 'ADMIN' ? true : canViewAccounting,
           canValidateTransfert: role == 'ADMIN' ? true : canValidateTransfert,
           canDeleteBankRules: role == 'ADMIN' ? true : canDeleteBankRules,
+          canViewCharges: role == 'ADMIN' ? true : canViewCharges,
+          canCreateCharges: role == 'ADMIN' ? true : canCreateCharges,
+          canUpdateCharges: role == 'ADMIN' ? true : canUpdateCharges,
+          canDeleteCharges: role == 'ADMIN' ? true : canDeleteCharges,
+          canViewRemises: role == 'ADMIN' ? true : canViewRemises,
+          canCreateRemises: role == 'ADMIN' ? true : canCreateRemises,
+          canUpdateRemises: role == 'ADMIN' ? true : canUpdateRemises,
+          canDeleteRemises: role == 'ADMIN' ? true : canDeleteRemises,
           assignedCaisseIds: selectedCaisses.toList(),
           newPassword: passwordCtrl.text.trim().isNotEmpty ? passwordCtrl.text.trim() : null,
         );

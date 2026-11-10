@@ -11,6 +11,18 @@ class AppColors {
   static const Color coolSteel = Color(0xFFA2AEBB);
   // Steel Blue: #3f88c5
   static const Color steelBlue = Color(0xFF3F88C5);
+
+  // Common UI Aliases
+  static const Color primary = deepSpaceBlue;
+  static const Color secondary = steelBlue;
+  static const Color error = brickEmber;
+  static const Color warning = amberFlame;
+  static const Color success = Color(0xFF2E7D32);
+  static const Color background = Color(0xFFF9FAFB);
+  static const Color surface = Color(0xFFF3F4F6);
+  static const Color border = Color(0xFFE5E7EB);
+  static const Color textPrimary = Color(0xFF111827);
+  static const Color textSecondary = Color(0xFF6B7280);
 }
 
 class AppTheme {

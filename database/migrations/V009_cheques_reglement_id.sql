@@ -1,0 +1,5 @@
+-- V009: Add REGLEMENT_ID to CHEQUES to link cheque directly to a reglement
+ALTER TABLE CHEQUES ADD REGLEMENT_ID VARCHAR(36);
+COMMIT;
+EXIT;
+

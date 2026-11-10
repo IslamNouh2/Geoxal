@@ -88,6 +88,10 @@ class Compte {
   /// True if this compte has children (group/parent node).
   bool get isParent => bd - bg > 1;
 
+  // Backward compatibility aliases
+  String get idCompte => id;
+  String get nomCompte => libelle;
+
   /// True if [other] is a direct or indirect descendant of this compte.
   bool isAncestorOf(Compte other) => bg < other.bg && bd > other.bd;
 

@@ -23,6 +23,16 @@ class User {
   final bool canViewAccounting;
   final bool canValidateTransfert;
   final bool canDeleteBankRules;
+  // Charges permissions
+  final bool canViewCharges;
+  final bool canCreateCharges;
+  final bool canUpdateCharges;
+  final bool canDeleteCharges;
+  // Remises de chèques permissions
+  final bool canViewRemises;
+  final bool canCreateRemises;
+  final bool canUpdateRemises;
+  final bool canDeleteRemises;
   final List<String> assignedCaisseIds;
 
   const User({
@@ -45,6 +55,14 @@ class User {
     this.canViewAccounting = true,
     this.canValidateTransfert = true,
     this.canDeleteBankRules = false,
+    this.canViewCharges = true,
+    this.canCreateCharges = true,
+    this.canUpdateCharges = true,
+    this.canDeleteCharges = false,
+    this.canViewRemises = true,
+    this.canCreateRemises = true,
+    this.canUpdateRemises = true,
+    this.canDeleteRemises = false,
     this.assignedCaisseIds = const [],
   });
 
@@ -78,6 +96,18 @@ class User {
   bool get hasViewStockPermission => isAdmin || canViewStock;
   bool get hasViewAccountingPermission => isAdmin || canViewAccounting;
 
+  // Charges permissions
+  bool get hasViewChargesPermission => isAdmin || canViewCharges;
+  bool get hasCreateChargesPermission => isAdmin || canCreateCharges;
+  bool get hasUpdateChargesPermission => isAdmin || canUpdateCharges;
+  bool get hasDeleteChargesPermission => isAdmin || canDeleteCharges;
+
+  // Remises de chèques permissions
+  bool get hasViewRemisesPermission => isAdmin || canViewRemises;
+  bool get hasCreateRemisesPermission => isAdmin || canCreateRemises;
+  bool get hasUpdateRemisesPermission => isAdmin || canUpdateRemises;
+  bool get hasDeleteRemisesPermission => isAdmin || canDeleteRemises;
+
   /// Legacy aliases
   bool get hasCreatePermission => hasCreateMovPermission;
   bool get hasUpdatePermission => hasUpdateMovPermission;
@@ -109,6 +139,14 @@ class User {
     bool? canViewAccounting,
     bool? canValidateTransfert,
     bool? canDeleteBankRules,
+    bool? canViewCharges,
+    bool? canCreateCharges,
+    bool? canUpdateCharges,
+    bool? canDeleteCharges,
+    bool? canViewRemises,
+    bool? canCreateRemises,
+    bool? canUpdateRemises,
+    bool? canDeleteRemises,
     List<String>? assignedCaisseIds,
   }) {
     return User(
@@ -131,6 +169,14 @@ class User {
       canViewAccounting: canViewAccounting ?? this.canViewAccounting,
       canValidateTransfert: canValidateTransfert ?? this.canValidateTransfert,
       canDeleteBankRules: canDeleteBankRules ?? this.canDeleteBankRules,
+      canViewCharges: canViewCharges ?? this.canViewCharges,
+      canCreateCharges: canCreateCharges ?? this.canCreateCharges,
+      canUpdateCharges: canUpdateCharges ?? this.canUpdateCharges,
+      canDeleteCharges: canDeleteCharges ?? this.canDeleteCharges,
+      canViewRemises: canViewRemises ?? this.canViewRemises,
+      canCreateRemises: canCreateRemises ?? this.canCreateRemises,
+      canUpdateRemises: canUpdateRemises ?? this.canUpdateRemises,
+      canDeleteRemises: canDeleteRemises ?? this.canDeleteRemises,
       assignedCaisseIds: assignedCaisseIds ?? this.assignedCaisseIds,
     );
   }

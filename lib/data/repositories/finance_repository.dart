@@ -1,4 +1,4 @@
-import '../../../core/utils/uuid.dart';
+﻿import '../../../core/utils/uuid.dart';
 import '../../data/datasources/finance_datasource.dart';
 import '../../data/models/compte.dart';
 import '../../data/models/demande_transfert.dart';
@@ -63,7 +63,7 @@ class FinanceRepository {
         to: to,
       );
 
-  Future<void> createMovement({
+  Future<String> createMovement({
     required DateTime date,
     required String compteSourceId,
     required String compteDestId,
@@ -76,8 +76,9 @@ class FinanceRepository {
     double? tauxChange,
     double? montantDevise,
   }) async {
+    final id = Uuid.v4();
     final movement = Movement(
-      id: Uuid.v4(),
+      id: id,
       date: date,
       compteSourceId: compteSourceId,
       compteDestId: compteDestId,
@@ -91,6 +92,7 @@ class FinanceRepository {
       montantDevise: montantDevise,
     );
     await _dataSource.createMovement(movement);
+    return id;
   }
 
   Future<void> updateMovement(
@@ -206,3 +208,4 @@ class FinanceRepository {
   }) =>
       _dataSource.refuserDemandeTransfert(demandeId, valideurUserId: valideurUserId, motif: motif);
 }
+

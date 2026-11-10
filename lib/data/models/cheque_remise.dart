@@ -130,7 +130,8 @@ class RemiseCheque {
   final String id;
   final String bordereauNumber;
   final DateTime dateRemise;
-  final String bankCompteId;       // FK COMPTES (compte banque)
+  final String bankCompteId;       // FK COMPTES (compte banque destinataire)
+  final String? sourceCompteId;     // FK COMPTES (compte recette/vente source)
   final double totalAmount;
   final int chequesCount;
   final RemiseStatus status;
@@ -145,6 +146,8 @@ class RemiseCheque {
   // Joined display
   final String? bankCompteCode;
   final String? bankCompteLabel;
+  final String? sourceCompteCode;
+  final String? sourceCompteLabel;
   final List<Cheque>? cheques;
   final List<BankTransactionFee>? fees;
 
@@ -153,6 +156,7 @@ class RemiseCheque {
     required this.bordereauNumber,
     required this.dateRemise,
     required this.bankCompteId,
+    this.sourceCompteId,
     this.totalAmount = 0.0,
     this.chequesCount = 0,
     this.status = RemiseStatus.brouillon,
@@ -165,6 +169,8 @@ class RemiseCheque {
     this.cancelledAt,
     this.bankCompteCode,
     this.bankCompteLabel,
+    this.sourceCompteCode,
+    this.sourceCompteLabel,
     this.cheques,
     this.fees,
   });
@@ -183,6 +189,7 @@ class RemiseCheque {
       bordereauNumber: map['BORDEREAU_NUMBER'].toString().trim(),
       dateRemise: parseDt(map['DATE_REMISE']),
       bankCompteId: map['BANK_COMPTE_ID'].toString().trim(),
+      sourceCompteId: map['SOURCE_COMPTE_ID']?.toString().trim(),
       totalAmount: double.tryParse(map['TOTAL_AMOUNT']?.toString() ?? '0') ?? 0.0,
       chequesCount: int.tryParse(map['CHEQUES_COUNT']?.toString() ?? '0') ?? 0,
       status: RemiseStatus.fromString(map['STATUS']?.toString()),
@@ -195,6 +202,8 @@ class RemiseCheque {
       cancelledAt: map['CANCELLED_AT'] != null ? parseDt(map['CANCELLED_AT']) : null,
       bankCompteCode: map['BANK_CODE']?.toString().trim(),
       bankCompteLabel: map['BANK_LABEL']?.toString().trim(),
+      sourceCompteCode: map['SOURCE_CODE']?.toString().trim(),
+      sourceCompteLabel: map['SOURCE_LABEL']?.toString().trim(),
     );
   }
 
@@ -204,6 +213,7 @@ class RemiseCheque {
       'BORDEREAU_NUMBER': bordereauNumber,
       'DATE_REMISE': dateRemise.toIso8601String(),
       'BANK_COMPTE_ID': bankCompteId,
+      'SOURCE_COMPTE_ID': sourceCompteId,
       'TOTAL_AMOUNT': totalAmount,
       'CHEQUES_COUNT': chequesCount,
       'STATUS': status.code,
@@ -294,5 +304,43 @@ class BankTransactionFee {
       'EDITED_AT': editedAt?.toIso8601String(),
       'EDIT_REASON': editReason,
     };
+  }
+
+  BankTransactionFee copyWith({
+    String? id,
+    String? remiseId,
+    String? movementTrisorId,
+    String? ruleId,
+    String? chargeCompteId,
+    double? baseAmount,
+    double? rateOrAmount,
+    double? computedAmount,
+    double? finalAmount,
+    bool? isManuallyEdited,
+    String? editedBy,
+    DateTime? editedAt,
+    String? editReason,
+    String? chargeCompteCode,
+    String? chargeCompteLabel,
+    String? ruleName,
+  }) {
+    return BankTransactionFee(
+      id: id ?? this.id,
+      remiseId: remiseId ?? this.remiseId,
+      movementTrisorId: movementTrisorId ?? this.movementTrisorId,
+      ruleId: ruleId ?? this.ruleId,
+      chargeCompteId: chargeCompteId ?? this.chargeCompteId,
+      baseAmount: baseAmount ?? this.baseAmount,
+      rateOrAmount: rateOrAmount ?? this.rateOrAmount,
+      computedAmount: computedAmount ?? this.computedAmount,
+      finalAmount: finalAmount ?? this.finalAmount,
+      isManuallyEdited: isManuallyEdited ?? this.isManuallyEdited,
+      editedBy: editedBy ?? this.editedBy,
+      editedAt: editedAt ?? this.editedAt,
+      editReason: editReason ?? this.editReason,
+      chargeCompteCode: chargeCompteCode ?? this.chargeCompteCode,
+      chargeCompteLabel: chargeCompteLabel ?? this.chargeCompteLabel,
+      ruleName: ruleName ?? this.ruleName,
+    );
   }
 }

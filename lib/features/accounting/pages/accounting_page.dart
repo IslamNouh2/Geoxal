@@ -1,7 +1,7 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme.dart';
+import '../../../app/theme.dart';
 import '../../../../core/database/database.dart';
 import '../../../../core/security/session.dart';
 import '../../../../core/utils/format.dart';
@@ -15,6 +15,10 @@ import '../widgets/journal_suppression_dialog.dart';
 import '../widgets/new_movement_dialog.dart';
 import '../widgets/select_caisse_dialog.dart';
 import '../widgets/tresorerie_statistiques_dialog.dart';
+import '../../../../core/utils/uuid.dart';
+import '../../../../data/datasources/charges_data_source.dart';
+import '../../../../data/models/charge.dart';
+import '../../../../data/repositories/charges_repository.dart';
 
 class AccountingPage extends StatefulWidget {
   const AccountingPage({super.key});
@@ -159,7 +163,7 @@ class _AccountingPageState extends State<AccountingPage> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Impossible d\'initialiser la trésorerie: $e';
+        _error = 'Impossible d\'initialiser la trأ©sorerie: $e';
       });
     }
   }
@@ -251,7 +255,7 @@ class _AccountingPageState extends State<AccountingPage> {
         tauxChange,
         montantDevise,
       }) async {
-        await _controller.createMovement(
+        final mvtId = await _controller.createMovement(
           date: date,
           compteSourceId: compteSourceId,
           compteDestId: compteDestId,
@@ -264,10 +268,58 @@ class _AccountingPageState extends State<AccountingPage> {
           tauxChange: tauxChange,
           montantDevise: montantDevise,
         );
+        // Auto-créer une Charge si le compte destination est un compte de charges (code commençant par '6')
+        {
+          final Compte? destCompte = _accounts.cast<Compte?>().firstWhere(
+            (a) => a?.id == compteDestId,
+            orElse: () => null,
+          );
+          final bool isChargesCompte = destCompte != null &&
+              (destCompte.code.trim().startsWith('6') ||
+                  destCompte.typeCompte == CompteType.depense);
+          if (isChargesCompte) {
+            try {
+              final chargesRepo = ChargesRepository(
+                ChargesDataSource(Database.instance),
+                Database.instance,
+              );
+              final nextRef = await chargesRepo.generateNextRefCharge();
+              final autoCharge = Charge(
+                id: Uuid.v4(),
+                userId: Session.user?.id ?? '',
+                dateCreation: DateTime.now(),
+                referance: nextRef,
+                dateCharge: date,
+                compteId: compteDestId,
+                compteCode: destCompte.code,
+                compteLibelle: destCompte.libelle,
+                categorie: CategorieCharge.simple,
+                amortissable: false,
+                dateDebutConsommation: date,
+                dateFinConsommation: date,
+                montantCharge: montant,
+                montantRegle: montant, // Réglée automatiquement car débitée depuis la trésorerie
+                designation: designation,
+                observation: 'Créée automatiquement depuis Trésorerie',
+              );
+              await chargesRepo.createCharge(autoCharge);
+              // Insert DETAIL_MVT_CHARGES so TRG_DMC_AI sets MONTANT_REGLE correctly
+              final detailId = Uuid.v4();
+              final now = DateTime.now();
+              final nowSql = now.toIso8601String().replaceFirst('T', ' ').substring(0, 19);
+              final insertDetail =
+                  "INSERT INTO DETAIL_MVT_CHARGES (ID_DETAIL_MVT_CHARGE, ID_MVT_TRESOR, TRANCHE_MONTANT, ID_CHARGE, DATE_CREAT) VALUES ('$detailId', '$mvtId', $montant, '${autoCharge.id}', '$nowSql')";
+              await Database.instance.connection.connection!.execute(insertDetail);
+            } catch (e) {
+              // Ne pas bloquer le mouvement si la création automatique échoue
+              debugPrint('Auto-charge creation failed: ');
+            }
+          }
+        }
 
-        // Si des frais bancaires / TVA s'appliquent, créer automatiquement les écritures de charge
+        // Si des frais bancaires / TVA s'appliquent, crأ©er automatiquement les أ©critures de charge
         if (fees != null && fees.isNotEmpty) {
-          // Identifier le compte bancaire impliqué (source ou dest)
+          // Identifier le compte bancaire impliquأ© (source ou dest)
           final isBankDest = _accounts.any((a) => a.id == compteDestId && (a.typeCompte == CompteType.banque || a.code.startsWith('51')));
           final bankId = isBankDest ? compteDestId : compteSourceId;
 
@@ -286,10 +338,15 @@ class _AccountingPageState extends State<AccountingPage> {
         }
       },
       onCreateAccount: (Session.user?.hasManageComptesPermission ?? true)
-          +? (code, libelle, parentId, typeCompte, {isDevise = false, codeDevise}) async {
+          ? (code, libelle, parentId, typeCompte,
+              {isDevise = false, codeDevise}) async {
               final parent = parentId == null
                   ? null
-                  : _accounts.firstWhere((a) => a.id == parentId, orElse: () => _accounts.first);
+                  : _accounts.firstWhere(
+                      (a) => a.id == parentId,
+                      orElse: () => _accounts.first,
+                    );
+
               await _controller.createAccount(
                 code: code,
                 libelle: libelle,
@@ -300,9 +357,17 @@ class _AccountingPageState extends State<AccountingPage> {
                 isDevise: isDevise,
                 codeDevise: codeDevise,
               );
+
               final updated = await _controller.loadAccounts();
-              final updatedIds = await _controller.loadAccountIdsWithMovements();
-              if (mounted) setState(() { _accounts = updated; _accountIdsWithMovements = updatedIds; });
+              final updatedIds =
+                  await _controller.loadAccountIdsWithMovements();
+
+              if (mounted) {
+                setState(() {
+                  _accounts = updated;
+                  _accountIdsWithMovements = updatedIds;
+                });
+              }
             }
           : null,
     );
@@ -311,7 +376,7 @@ class _AccountingPageState extends State<AccountingPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Mouvement de trésorerie enregistré avec succès.'),
+        content: Text('Mouvement de trأ©sorerie enregistrأ© avec succأ¨s.'),
         backgroundColor: Color(0xFF10B981),
       ),
     );
@@ -320,6 +385,15 @@ class _AccountingPageState extends State<AccountingPage> {
   }
 
   Future<void> _editMovement(Movement movement) async {
+    if (movement.isFromReglement) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ce mouvement provient d\'un rأ¨glement Vente/Achat. Il ne peut أھtre modifiأ© que depuis la section Vente ou Achat.'),
+          backgroundColor: Color(0xFFEAB308),
+        ),
+      );
+      return;
+    }
     final dateCtrl = TextEditingController(
       text: '${movement.date.year.toString().padLeft(4,'0')}-'
             '${movement.date.month.toString().padLeft(2,'0')}-'
@@ -394,7 +468,7 @@ class _AccountingPageState extends State<AccountingPage> {
                     controller: desCtrl,
                     maxLines: 2,
                     decoration: InputDecoration(
-                      labelText: 'Désignation',
+                      labelText: 'Dأ©signation',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       contentPadding: const EdgeInsets.all(10),
                     ),
@@ -432,7 +506,7 @@ class _AccountingPageState extends State<AccountingPage> {
       await _loadMovements();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mouvement modifié.'), backgroundColor: Color(0xFF10B981)),
+          const SnackBar(content: Text('Mouvement modifiأ©.'), backgroundColor: Color(0xFF10B981)),
         );
       }
     } catch (e) {
@@ -445,6 +519,25 @@ class _AccountingPageState extends State<AccountingPage> {
   }
 
   Future<void> _deleteMovement(Movement movement) async {
+    if (movement.isFromReglement) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ce mouvement provient d\'un règlement Vente/Achat. Vous ne pouvez pas le supprimer directement depuis la trésorerie.'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+
+    // Check if this movement has a linked auto-charge
+    final chargesRepo = ChargesRepository(
+      ChargesDataSource(Database.instance),
+      Database.instance,
+    );
+    final linkedCharge = await chargesRepo.getAutoChargeForMovement(movement.id);
+    final hasAutoCharge = linkedCharge != null;
+
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -460,12 +553,39 @@ class _AccountingPageState extends State<AccountingPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(movement.designation.isEmpty ? '(Sans désignation)' : movement.designation,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              movement.designation.isEmpty ? '(Sans désignation)' : movement.designation,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 4),
             Text('Montant: ${movement.montant.toStringAsFixed(2)} DA',
                 style: const TextStyle(color: Color(0xFF6B7280))),
             const SizedBox(height: 10),
+            if (hasAutoCharge) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFF59E0B)),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B), size: 18),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Ce mouvement a généré automatiquement une charge.\n'
+                        'Sa suppression supprimera aussi la charge associée.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             const Text('Cette action est irréversible.',
                 style: TextStyle(fontSize: 12, color: Color(0xFFEF4444))),
           ],
@@ -478,7 +598,7 @@ class _AccountingPageState extends State<AccountingPage> {
               backgroundColor: const Color(0xFFEF4444), foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('Supprimer'),
+            child: Text(hasAutoCharge ? 'Supprimer (mouvement + charge)' : 'Supprimer'),
           ),
         ],
       ),
@@ -486,11 +606,23 @@ class _AccountingPageState extends State<AccountingPage> {
 
     if (confirmed != true || !mounted) return;
     try {
+      if (hasAutoCharge) {
+        // 1. Delete DETAIL_MVT_CHARGES row first (trigger resets MONTANT_REGLE)
+        await chargesRepo.deleteDetailMvtCharge(linkedCharge.detailId);
+        // 2. Delete the charge
+        await chargesRepo.deleteCharge(linkedCharge.chargeId);
+      }
+      // 3. Delete the trésorerie movement
       await _controller.deleteMovement(movement.id, userId: Session.user?.id);
       await _loadMovements();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mouvement supprimé.'), backgroundColor: Color(0xFFEF4444)),
+          SnackBar(
+            content: Text(hasAutoCharge
+                ? 'Mouvement et charge associée supprimés avec succès.'
+                : 'Mouvement supprimé.'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
         );
       }
     } catch (e) {
@@ -600,7 +732,7 @@ class _AccountingPageState extends State<AccountingPage> {
                 const SizedBox(height: 2),
                 if (_fromDate != null && _toDate != null)
                   Text(
-                    'Période: ${formatDate(_fromDate!)} au ${formatDate(_toDate!)}',
+                    'Pأ©riode: ${formatDate(_fromDate!)} au ${formatDate(_toDate!)}',
                     style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
                   ),
               ],
@@ -619,7 +751,7 @@ class _AccountingPageState extends State<AccountingPage> {
             const Icon(Icons.account_balance_wallet_outlined, size: 22, color: Color(0xFF6B7280)),
             const SizedBox(width: 10),
             const Text(
-              'Aucune caisse sélectionnée',
+              'Aucune caisse sأ©lectionnأ©e',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF4B5563)),
             ),
             const SizedBox(width: 12),
@@ -740,7 +872,7 @@ class _AccountingPageState extends State<AccountingPage> {
           const Icon(Icons.error_outline, size: 20, color: AppColors.brickEmber),
           const SizedBox(width: 10),
           Expanded(child: Text(_error!, style: const TextStyle(fontSize: 13, color: AppColors.deepSpaceBlue))),
-          TextButton(onPressed: _loadMovements, child: const Text('Réessayer')),
+          TextButton(onPressed: _loadMovements, child: const Text('Rأ©essayer')),
         ],
       ),
     );
@@ -779,7 +911,7 @@ class _AccountingPageState extends State<AccountingPage> {
 
     return Row(
       children: [
-        // Solde Initial (Cumul avant la période) - Conditionné par permission
+        // Solde Initial (Cumul avant la pأ©riode) - Conditionnأ© par permission
         if (canViewOld) ...[
           Expanded(
             child: _statCard(
@@ -796,12 +928,12 @@ class _AccountingPageState extends State<AccountingPage> {
           const SizedBox(width: 14),
         ],
 
-        // Entrées de la période
+        // Entrأ©es de la pأ©riode
         Expanded(
           child: _statCard(
-            title: isDevise ? 'Entrées ($currCode)' : 'Entrées (Période)',
+            title: isDevise ? 'Entrأ©es ($currCode)' : 'Entrأ©es (Pأ©riode)',
             value: isDevise ? '+${fmtDev(_stats.deviseEntrees)}' : '+${formatMoney(_stats.totalEntrees)}',
-            sub: isDevise ? '≈ ${formatMoney(_stats.totalEntrees)} DZD' : null,
+            sub: isDevise ? 'â‰ˆ ${formatMoney(_stats.totalEntrees)} DZD' : null,
             icon: Icons.arrow_downward_rounded,
             iconColor: const Color(0xFF10B981),
             valueColor: const Color(0xFF059669),
@@ -809,12 +941,12 @@ class _AccountingPageState extends State<AccountingPage> {
         ),
         const SizedBox(width: 14),
 
-        // Sorties de la période
+        // Sorties de la pأ©riode
         Expanded(
           child: _statCard(
-            title: isDevise ? 'Sorties ($currCode)' : 'Sorties (Période)',
+            title: isDevise ? 'Sorties ($currCode)' : 'Sorties (Pأ©riode)',
             value: isDevise ? '-${fmtDev(_stats.deviseSorties)}' : '-${formatMoney(_stats.totalSorties)}',
-            sub: isDevise ? '≈ ${formatMoney(_stats.totalSorties)} DZD' : null,
+            sub: isDevise ? 'â‰ˆ ${formatMoney(_stats.totalSorties)} DZD' : null,
             icon: Icons.arrow_upward_rounded,
             iconColor: const Color(0xFFEF4444),
             valueColor: const Color(0xFFDC2626),
@@ -825,11 +957,11 @@ class _AccountingPageState extends State<AccountingPage> {
         // Solde Final
         Expanded(
           child: _statCard(
-            title: isDevise ? 'Solde Final ($currCode)' : 'Solde Final (Clôture)',
+            title: isDevise ? 'Solde Final ($currCode)' : 'Solde Final (Clأ´ture)',
             value: isDevise
                 ? '${_stats.deviseSoldeFinal.toStringAsFixed(2)} $currCode'
                 : formatMoney(_stats.soldeFinal),
-            sub: isDevise ? '≈ ${formatMoney(_stats.soldeFinal)} DZD' : null,
+            sub: isDevise ? 'â‰ˆ ${formatMoney(_stats.soldeFinal)} DZD' : null,
             icon: Icons.account_balance_wallet_rounded,
             iconColor: _stats.soldeFinal >= 0 ? const Color(0xFF2563EB) : const Color(0xFFDC2626),
             valueColor: _stats.soldeFinal >= 0 ? const Color(0xFF1D4ED8) : const Color(0xFFDC2626),
@@ -840,7 +972,7 @@ class _AccountingPageState extends State<AccountingPage> {
         // Nombre de mouvements
         Expanded(
           child: _statCard(
-            title: 'Opérations',
+            title: 'Opأ©rations',
             value: '${_stats.countMovements}',
             icon: Icons.receipt_long_rounded,
             iconColor: const Color(0xFF8B5CF6),
@@ -953,7 +1085,7 @@ class _AccountingPageState extends State<AccountingPage> {
                         const DataColumn(label: Text('Sens')),
                         const DataColumn(label: Text('Compte Source (Sortant)')),
                         const DataColumn(label: Text('Compte Dest. (Entrant)')),
-                        const DataColumn(label: Text('Désignation')),
+                        const DataColumn(label: Text('Dأ©signation')),
                         DataColumn(
                           numeric: true,
                           label: Text(
@@ -992,7 +1124,7 @@ class _AccountingPageState extends State<AccountingPage> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      isSortie ? 'Sortie' : 'Entrée',
+                                      isSortie ? 'Sortie' : 'Entrأ©e',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
@@ -1022,7 +1154,7 @@ class _AccountingPageState extends State<AccountingPage> {
                               ),
                             ),
                             DataCell(
-                              Text(movement.designation.isEmpty ? '—' : movement.designation,
+                              Text(movement.designation.isEmpty ? 'â€”' : movement.designation,
                                   overflow: TextOverflow.ellipsis),
                             ),
                             DataCell(
@@ -1050,14 +1182,14 @@ class _AccountingPageState extends State<AccountingPage> {
                                     ),
                                     if (hasDevise)
                                       Text(
-                                        '≈ ${formatMoney(movement.montant)} DZD',
+                                        'â‰ˆ ${formatMoney(movement.montant)} DZD',
                                         style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF)),
                                       ),
                                   ],
                                 );
                               }),
                             ),
-                            // Taux de Change cell — only when viewing a devise caisse
+                            // Taux de Change cell â€” only when viewing a devise caisse
                             if (_activeCaisse?.isDevise == true && _movements.any((m) => m.montantDevise != null))
                               DataCell(
                                 movement.tauxChange != null
@@ -1087,7 +1219,7 @@ class _AccountingPageState extends State<AccountingPage> {
                                           ],
                                         ),
                                       )
-                                    : const Text('—', style: TextStyle(color: Color(0xFF9CA3AF))),
+                                    : const Text('â€”', style: TextStyle(color: Color(0xFF9CA3AF))),
                               ),
                             DataCell(
                               Row(
@@ -1117,7 +1249,7 @@ class _AccountingPageState extends State<AccountingPage> {
                                     ),
                                   if (!(Session.user?.hasUpdateMovPermission ?? true) &&
                                       !(Session.user?.hasDeleteMovPermission ?? true))
-                                    const Text('—', style: TextStyle(color: Color(0xFF9CA3AF))),
+                                    const Text('â€”', style: TextStyle(color: Color(0xFF9CA3AF))),
                                 ],
                               ),
                             ),
@@ -1140,12 +1272,12 @@ class _AccountingPageState extends State<AccountingPage> {
             Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey.shade400),
             const SizedBox(height: 12),
             const Text(
-              'Aucun mouvement pour cette période',
+              'Aucun mouvement pour cette pأ©riode',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF1F2937)),
             ),
             const SizedBox(height: 4),
             Text(
-              'Aucune opération enregistrée pour ${_activeCaisse?.displayName ?? 'cette caisse'}.',
+              'Aucune opأ©ration enregistrأ©e pour ${_activeCaisse?.displayName ?? 'cette caisse'}.',
               style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
             ),
             const SizedBox(height: 16),
@@ -1165,3 +1297,10 @@ class _AccountingPageState extends State<AccountingPage> {
     );
   }
 }
+
+
+
+
+
+
+

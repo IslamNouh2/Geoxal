@@ -9,11 +9,17 @@ class FactureVente {
   final String userId;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? departementId;
+  final String? compteId;
+  final String? modePaiement;
 
   // Joined display helpers
   final String? clientNom;
   final String? clientTelephone;
   final String? clientEmail;
+  final String? departementNom;
+  final String? compteLibelle;
+  final double montantRegle;
 
   const FactureVente({
     required this.id,
@@ -25,8 +31,17 @@ class FactureVente {
     required this.userId,
     this.createdAt,
     this.updatedAt,
+    this.departementId,
+    this.compteId,
+    this.modePaiement,
     this.clientNom,
     this.clientTelephone,
     this.clientEmail,
+    this.departementNom,
+    this.compteLibelle,
+    this.montantRegle = 0.0,
   });
+
+  double get resteAPayer => (montant - montantRegle) > 0.001 ? montant - montantRegle : 0.0;
+  bool get isSoldee => resteAPayer <= 0.001;
 }

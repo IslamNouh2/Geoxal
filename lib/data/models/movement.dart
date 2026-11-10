@@ -16,6 +16,8 @@ class Movement {
   final DateTime? dateCheque;
   final double? tauxChange;
   final double? montantDevise;
+  final String? reglementId;
+  final String? origineModule;
 
   // Joined/resolved helper fields for display
   final String? sourceCode;
@@ -38,11 +40,15 @@ class Movement {
     this.dateCheque,
     this.tauxChange,
     this.montantDevise,
+    this.reglementId,
+    this.origineModule,
     this.sourceCode,
     this.sourceLibelle,
     this.destCode,
     this.destLibelle,
   });
+
+  bool get isFromReglement => (reglementId != null && reglementId!.isNotEmpty) || (origineModule != null && origineModule!.isNotEmpty);
 
   String get sourceDisplayName =>
       sourceCode != null ? '$sourceCode - ${sourceLibelle ?? ''}' : compteSourceId;

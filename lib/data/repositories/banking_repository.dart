@@ -1,7 +1,7 @@
+import '../datasources/banking_datasource.dart';
 import '../models/bank_rule.dart';
 import '../models/cheque_remise.dart';
 import '../models/compte.dart';
-import '../datasources/banking_datasource.dart';
 
 class BankingRepository {
   final BankingDataSource _dataSource;
@@ -11,6 +11,7 @@ class BankingRepository {
   // Accounts
   Future<List<Compte>> getBankAccounts() => _dataSource.getBankAccounts();
   Future<List<Compte>> getExpenseAccounts() => _dataSource.getExpenseAccounts();
+  Future<List<Compte>> getIncomeAndSalesAccounts() => _dataSource.getIncomeAndSalesAccounts();
 
   // Catalogs
   Future<List<TransactionTypeCatalog>> getTransactionTypes() => _dataSource.getTransactionTypes();
@@ -47,6 +48,7 @@ class BankingRepository {
     required String remiseId,
     required String validatedByUserId,
     required String bankCompteId,
+    String? bankCompteSourceId,
     required double totalAmount,
     required String bordereauNumber,
     required List<BankTransactionFee> fees,
@@ -55,6 +57,7 @@ class BankingRepository {
         remiseId: remiseId,
         validatedByUserId: validatedByUserId,
         bankCompteId: bankCompteId,
+        bankCompteSourceId: bankCompteSourceId,
         totalAmount: totalAmount,
         bordereauNumber: bordereauNumber,
         fees: fees,
@@ -70,4 +73,7 @@ class BankingRepository {
         cancelledByUserId: cancelledByUserId,
         reason: reason,
       );
+
+  Future<void> deleteDraftRemise(String remiseId) =>
+      _dataSource.deleteDraftRemise(remiseId);
 }

@@ -12,35 +12,55 @@ class VenteRepository {
     DateTime? to,
     String? tiersId,
     String? searchQuery,
-  }) =>
-      _dataSource.getFacturesVente(
-        from: from,
-        to: to,
-        tiersId: tiersId,
-        searchQuery: searchQuery,
-      );
+  }) {
+    return _dataSource.getFacturesVente(
+      from: from,
+      to: to,
+      tiersId: tiersId,
+      searchQuery: searchQuery,
+    );
+  }
 
-  Future<String> getNextNumFacture() => _dataSource.generateNextNumFacture();
+  Future<String> getNextNumFacture() {
+    return _dataSource.generateNextNumFacture();
+  }
 
-  Future<FactureVente> createFactureVente({
+  /// Creates a new Facture Vente.
+  ///
+  /// If [numFacture] is null or empty the number is auto-generated via
+  /// [generateNextNumFacture] (used when a non-admin saves the form).
+  /// Admin users may supply a custom [numFacture].
+  ///
+  /// Returns the actual invoice number that was saved.
+  Future<String> createFactureVente({
     required String tiersId,
-    required String numFacture,
+    String? numFacture,
     required DateTime dateFacture,
     required double montant,
     String? designation,
     required String userId,
+    String? departementId,
+    String? compteId,
+    String? modePaiement,
   }) async {
-    final facture = FactureVente(
+    // Auto-generate when not provided or blank (non-admin path)
+    final resolvedNum = (numFacture == null || numFacture.trim().isEmpty)
+        ? await _dataSource.generateNextNumFacture()
+        : numFacture.trim();
+
+    final fv = FactureVente(
       id: Uuid.v4(),
       tiersId: tiersId,
-      numFacture: numFacture,
+      numFacture: resolvedNum,
       dateFacture: dateFacture,
       montant: montant,
       designation: designation,
       userId: userId,
+      departementId: departementId,
+      compteId: compteId,
+      modePaiement: modePaiement,
     );
-
-    await _dataSource.createFactureVente(facture);
-    return facture;
+    await _dataSource.createFactureVente(fv);
+    return resolvedNum;
   }
 }

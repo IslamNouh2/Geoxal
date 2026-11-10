@@ -1,0 +1,14 @@
+-- V007: Add invoice number format settings
+-- Applied to GEOXAL.FDB
+
+UPDATE OR INSERT INTO APP_SETTINGS (SETTING_KEY, SETTING_VALUE, DESCRIPTION)
+VALUES ('VENTE_NUM_FORMAT', 'FV{YY}/{NNNN}', 'Format numerotation factures vente. Variables: {YY} {YYYY} {MM} {NNNN} {NNN}')
+MATCHING (SETTING_KEY);
+
+UPDATE OR INSERT INTO APP_SETTINGS (SETTING_KEY, SETTING_VALUE, DESCRIPTION)
+VALUES ('ACHAT_NUM_FORMAT', 'FA{YY}/{NNNN}', 'Format numerotation factures achat. Variables: {YY} {YYYY} {MM} {NNNN} {NNN}')
+MATCHING (SETTING_KEY);
+
+COMMIT;
+EXIT;
+

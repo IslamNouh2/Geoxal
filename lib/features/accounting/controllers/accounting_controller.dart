@@ -1,4 +1,4 @@
-import '../../../data/models/compte.dart';
+﻿import '../../../data/models/compte.dart';
 import '../../../data/models/demande_transfert.dart';
 import '../../../data/models/journal_suppression_entry.dart';
 import '../../../data/models/movement.dart';
@@ -62,7 +62,7 @@ class AccountingController {
         to: to,
       );
 
-  Future<void> createMovement({
+  Future<String> createMovement({
     required DateTime date,
     required String compteSourceId,
     required String compteDestId,
@@ -185,3 +185,4 @@ class AccountingController {
   }) =>
       _repository.refuserDemandeTransfert(demandeId, valideurUserId: valideurUserId, motif: motif);
 }
+

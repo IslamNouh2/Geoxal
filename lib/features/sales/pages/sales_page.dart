@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme.dart';
+import '../../../app/theme.dart';
 import '../../../../core/database/database.dart';
 import '../../../../core/utils/format.dart';
+import '../../../../data/datasources/achat_datasource.dart';
 import '../../../../data/datasources/tiers_datasource.dart';
 import '../../../../data/datasources/vente_datasource.dart';
+import '../../../../data/models/facture_achat.dart';
 import '../../../../data/models/facture_vente.dart';
+import '../../../../data/models/tiers.dart';
+import '../../../../data/repositories/achat_repository.dart';
 import '../../../../data/repositories/tiers_repository.dart';
 import '../../../../data/repositories/vente_repository.dart';
+import '../widgets/fiche_client_dialog.dart';
 import '../widgets/new_sale_dialog.dart';
+import '../widgets/reglement_dialog.dart';
 
 class SalesPage extends StatefulWidget {
   const SalesPage({super.key});
@@ -19,6 +25,7 @@ class SalesPage extends StatefulWidget {
 
 class _SalesPageState extends State<SalesPage> {
   late final VenteRepository _venteRepository;
+  late final AchatRepository _achatRepository;
   late final TiersRepository _tiersRepository;
 
   final TextEditingController _searchController = TextEditingController();
@@ -26,6 +33,8 @@ class _SalesPageState extends State<SalesPage> {
   final TextEditingController _toController = TextEditingController();
 
   List<FactureVente> _invoices = [];
+  List<FactureAchat> _purchases = [];
+  List<Tiers> _clients = [];
   bool _loading = true;
   String? _error;
 
@@ -34,6 +43,7 @@ class _SalesPageState extends State<SalesPage> {
     super.initState();
     final db = Database.instance;
     _venteRepository = VenteRepository(VenteDataSource(db));
+    _achatRepository = AchatRepository(AchatDataSource(db));
     _tiersRepository = TiersRepository(TiersDataSource(db));
     _load();
   }
@@ -63,9 +73,14 @@ class _SalesPageState extends State<SalesPage> {
         searchQuery: query.isEmpty ? null : query,
       );
 
+      final purchases = await _achatRepository.getFacturesAchat();
+      final clients = await _tiersRepository.getClients();
+
       if (!mounted) return;
       setState(() {
         _invoices = list;
+        _purchases = purchases;
+        _clients = clients;
         _loading = false;
       });
     } catch (e) {
@@ -95,9 +110,70 @@ class _SalesPageState extends State<SalesPage> {
     }
   }
 
+  Future<void> _openFicheClient(String tiersId) async {
+    final tiers = _clients.cast<Tiers?>().firstWhere(
+      (t) => t?.id == tiersId,
+      orElse: () => null,
+    );
+    if (tiers == null) return;
+
+    await showFicheClientDialog(
+      context,
+      tiers: tiers,
+      allClientFactures: _invoices,
+      allFournisseurFactures: _purchases,
+      onRefreshParent: _load,
+    );
+  }
+
+  Future<void> _openVersementClient(String tiersId) async {
+    final tiers = _clients.cast<Tiers?>().firstWhere(
+      (t) => t?.id == tiersId,
+      orElse: () => null,
+    );
+    if (tiers == null) return;
+
+    final saved = await showReglementDialog(
+      context,
+      tiers: tiers,
+      typeReglement: 'CLIENT',
+      mode: ReglementDialogMode.versement,
+      allClientFactures: _invoices,
+      allFournisseurFactures: _purchases,
+    );
+
+    if (saved == true && mounted) {
+      _load();
+    }
+  }
+
+  Future<void> _openReglerFacture(FactureVente invoice) async {
+    final tiers = _clients.cast<Tiers?>().firstWhere(
+      (t) => t?.id == invoice.tiersId,
+      orElse: () => null,
+    );
+    if (tiers == null) return;
+
+    final saved = await showReglementDialog(
+      context,
+      tiers: tiers,
+      typeReglement: 'CLIENT',
+      mode: ReglementDialogMode.regle,
+      specificFactureVente: invoice,
+      allClientFactures: _invoices,
+      allFournisseurFactures: _purchases,
+    );
+
+    if (saved == true && mounted) {
+      _load();
+    }
+  }
+
   double get _totalVentes => _invoices.fold(0.0, (sum, f) => sum + f.montant);
 
-  double get _panierMoyen => _invoices.isEmpty ? 0.0 : _totalVentes / _invoices.length;
+  double get _totalRegle => _invoices.fold(0.0, (sum, f) => sum + f.montantRegle);
+
+  double get _totalCreances => _invoices.fold(0.0, (sum, f) => sum + f.resteAPayer);
 
   @override
   Widget build(BuildContext context) {
@@ -219,9 +295,9 @@ class _SalesPageState extends State<SalesPage> {
       margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.brickEmber.withOpacity(0.08),
+        color: AppColors.brickEmber.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.brickEmber.withOpacity(0.3)),
+        border: Border.all(color: AppColors.brickEmber.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -239,7 +315,7 @@ class _SalesPageState extends State<SalesPage> {
       children: [
         Expanded(
           child: _statCard(
-            title: 'Chiffre d\'Affaires (Ventes)',
+            title: 'Chiffre d\'Affaires Total HT',
             value: formatMoney(_totalVentes),
             icon: Icons.trending_up_rounded,
             iconColor: const Color(0xFF10B981),
@@ -248,19 +324,19 @@ class _SalesPageState extends State<SalesPage> {
         const SizedBox(width: 16),
         Expanded(
           child: _statCard(
-            title: 'Factures de Vente',
-            value: '${_invoices.length}',
-            icon: Icons.receipt_long_rounded,
+            title: 'Total Règlements Encaissés',
+            value: formatMoney(_totalRegle),
+            icon: Icons.payments_rounded,
             iconColor: const Color(0xFF2563EB),
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
           child: _statCard(
-            title: 'Panier Moyen',
-            value: formatMoney(_panierMoyen),
-            icon: Icons.shopping_bag_outlined,
-            iconColor: const Color(0xFF8B5CF6),
+            title: 'Reste à Recouvrer (Créances)',
+            value: formatMoney(_totalCreances),
+            icon: Icons.pending_actions_rounded,
+            iconColor: const Color(0xFFE11D48),
           ),
         ),
       ],
@@ -281,7 +357,7 @@ class _SalesPageState extends State<SalesPage> {
         border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -293,7 +369,7 @@ class _SalesPageState extends State<SalesPage> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.12),
+              color: iconColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, size: 20, color: iconColor),
@@ -319,7 +395,7 @@ class _SalesPageState extends State<SalesPage> {
         border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -341,13 +417,17 @@ class _SalesPageState extends State<SalesPage> {
                         color: Color(0xFF374151),
                       ),
                       dataTextStyle: const TextStyle(fontSize: 13, color: Color(0xFF1F2937)),
-                      columnSpacing: 28,
+                      columnSpacing: 24,
                       columns: const [
                         DataColumn(label: Text('N° Facture')),
                         DataColumn(label: Text('Date')),
                         DataColumn(label: Text('Client')),
-                        DataColumn(label: Text('Désignation / Articles')),
-                        DataColumn(label: Text('Montant (TTC)'), numeric: true),
+                        DataColumn(label: Text('Département')),
+                        DataColumn(label: Text('Mode')),
+                        DataColumn(label: Text('Total HT'), numeric: true),
+                        DataColumn(label: Text('Réglé'), numeric: true),
+                        DataColumn(label: Text('Reste'), numeric: true),
+                        DataColumn(label: Text('Actions')),
                       ],
                       rows: _invoices.map((f) {
                         return DataRow(
@@ -363,26 +443,87 @@ class _SalesPageState extends State<SalesPage> {
                             ),
                             DataCell(Text(formatDate(f.dateFacture))),
                             DataCell(
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(f.clientNom ?? '—', style: const TextStyle(fontWeight: FontWeight.w500)),
-                                  if (f.clientTelephone != null)
-                                    Text(f.clientTelephone!, style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))),
-                                ],
+                              InkWell(
+                                onTap: () => _openFicheClient(f.tiersId),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(f.clientNom ?? '—', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF2563EB))),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.open_in_new, size: 12, color: Color(0xFF2563EB)),
+                                      ],
+                                    ),
+                                    if (f.clientTelephone != null)
+                                      Text(f.clientTelephone!, style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))),
+                                  ],
+                                ),
                               ),
                             ),
-                            DataCell(
-                              Text(f.designation ?? '—', overflow: TextOverflow.ellipsis),
-                            ),
+                            DataCell(Text(f.departementNom ?? '—')),
+                            DataCell(Text(f.modePaiement ?? '—')),
                             DataCell(
                               Text(
                                 formatMoney(f.montant),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF10B981),
+                                style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                formatMoney(f.montantRegle),
+                                style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF10B981)),
+                              ),
+                            ),
+                            DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: f.isSoldee ? Colors.green.shade50 : Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
+                                child: Text(
+                                  f.isSoldee ? 'Soldée' : formatMoney(f.resteAPayer),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: f.isSoldee ? Colors.green.shade700 : Colors.red.shade700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Bouton Fiche Client
+                                  IconButton(
+                                    icon: const Icon(Icons.assignment_ind_outlined, size: 18, color: Color(0xFF2563EB)),
+                                    tooltip: 'Fiche Client & Situation',
+                                    onPressed: () => _openFicheClient(f.tiersId),
+                                  ),
+                                  // Bouton Versement
+                                  IconButton(
+                                    icon: const Icon(Icons.add_card_rounded, size: 18, color: Color(0xFF10B981)),
+                                    tooltip: 'Versement Client',
+                                    onPressed: () => _openVersementClient(f.tiersId),
+                                  ),
+                                  // Bouton Régler
+                                  if (!f.isSoldee)
+                                    ElevatedButton(
+                                      onPressed: () => _openReglerFacture(f),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF2563EB),
+                                        foregroundColor: Colors.white,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                      ),
+                                      child: const Text('Régler', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                                    ),
+                                ],
                               ),
                             ),
                           ],

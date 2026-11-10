@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme.dart';
+import '../../../app/theme.dart';
 import '../../../../core/database/database.dart';
 import '../../../../core/utils/format.dart';
 import '../../../../data/datasources/achat_datasource.dart';
 import '../../../../data/datasources/tiers_datasource.dart';
+import '../../../../data/datasources/vente_datasource.dart';
 import '../../../../data/models/facture_achat.dart';
+import '../../../../data/models/facture_vente.dart';
+import '../../../../data/models/tiers.dart';
 import '../../../../data/repositories/achat_repository.dart';
 import '../../../../data/repositories/tiers_repository.dart';
+import '../../../../data/repositories/vente_repository.dart';
+import '../../sales/widgets/fiche_client_dialog.dart';
+import '../../sales/widgets/reglement_dialog.dart';
 import '../widgets/new_purchase_dialog.dart';
 
 class PurchasesPage extends StatefulWidget {
@@ -19,6 +25,7 @@ class PurchasesPage extends StatefulWidget {
 
 class _PurchasesPageState extends State<PurchasesPage> {
   late final AchatRepository _achatRepository;
+  late final VenteRepository _venteRepository;
   late final TiersRepository _tiersRepository;
 
   final TextEditingController _searchController = TextEditingController();
@@ -26,6 +33,8 @@ class _PurchasesPageState extends State<PurchasesPage> {
   final TextEditingController _toController = TextEditingController();
 
   List<FactureAchat> _invoices = [];
+  List<FactureVente> _sales = [];
+  List<Tiers> _fournisseurs = [];
   bool _loading = true;
   String? _error;
 
@@ -34,6 +43,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
     super.initState();
     final db = Database.instance;
     _achatRepository = AchatRepository(AchatDataSource(db));
+    _venteRepository = VenteRepository(VenteDataSource(db));
     _tiersRepository = TiersRepository(TiersDataSource(db));
     _load();
   }
@@ -63,9 +73,14 @@ class _PurchasesPageState extends State<PurchasesPage> {
         searchQuery: query.isEmpty ? null : query,
       );
 
+      final sales = await _venteRepository.getFacturesVente();
+      final suppliers = await _tiersRepository.getFournisseurs();
+
       if (!mounted) return;
       setState(() {
         _invoices = list;
+        _sales = sales;
+        _fournisseurs = suppliers;
         _loading = false;
       });
     } catch (e) {
@@ -87,17 +102,78 @@ class _PurchasesPageState extends State<PurchasesPage> {
     if (saved && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Facture d\'achat enregistrée avec succès!'),
-          backgroundColor: Color(0xFF10B981),
+          content: Text('Facture d\'achat créée avec succès!'),
+          backgroundColor: Color(0xFF2563EB),
         ),
       );
       _load();
     }
   }
 
+  Future<void> _openFicheFournisseur(String tiersId) async {
+    final tiers = _fournisseurs.cast<Tiers?>().firstWhere(
+      (t) => t?.id == tiersId,
+      orElse: () => null,
+    );
+    if (tiers == null) return;
+
+    await showFicheClientDialog(
+      context,
+      tiers: tiers,
+      allClientFactures: _sales,
+      allFournisseurFactures: _invoices,
+      onRefreshParent: _load,
+    );
+  }
+
+  Future<void> _openVersementFournisseur(String tiersId) async {
+    final tiers = _fournisseurs.cast<Tiers?>().firstWhere(
+      (t) => t?.id == tiersId,
+      orElse: () => null,
+    );
+    if (tiers == null) return;
+
+    final saved = await showReglementDialog(
+      context,
+      tiers: tiers,
+      typeReglement: 'FOURNISSEUR',
+      mode: ReglementDialogMode.versement,
+      allClientFactures: _sales,
+      allFournisseurFactures: _invoices,
+    );
+
+    if (saved == true && mounted) {
+      _load();
+    }
+  }
+
+  Future<void> _openReglerFacture(FactureAchat invoice) async {
+    final tiers = _fournisseurs.cast<Tiers?>().firstWhere(
+      (t) => t?.id == invoice.tiersId,
+      orElse: () => null,
+    );
+    if (tiers == null) return;
+
+    final saved = await showReglementDialog(
+      context,
+      tiers: tiers,
+      typeReglement: 'FOURNISSEUR',
+      mode: ReglementDialogMode.regle,
+      specificFactureAchat: invoice,
+      allClientFactures: _sales,
+      allFournisseurFactures: _invoices,
+    );
+
+    if (saved == true && mounted) {
+      _load();
+    }
+  }
+
   double get _totalAchats => _invoices.fold(0.0, (sum, f) => sum + f.montant);
 
-  double get _depenseMoyenne => _invoices.isEmpty ? 0.0 : _totalAchats / _invoices.length;
+  double get _totalRegle => _invoices.fold(0.0, (sum, f) => sum + f.montantRegle);
+
+  double get _totalDettes => _invoices.fold(0.0, (sum, f) => sum + f.resteAPayer);
 
   @override
   Widget build(BuildContext context) {
@@ -198,14 +274,14 @@ class _PurchasesPageState extends State<PurchasesPage> {
           ElevatedButton.icon(
             onPressed: _newInvoice,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEA580C),
+              backgroundColor: const Color(0xFF2563EB),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             icon: const Icon(Icons.add, size: 18),
             label: const Text(
-              'Nouvel Achat',
+              'Nouvel Achat / Charge',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
@@ -219,9 +295,9 @@ class _PurchasesPageState extends State<PurchasesPage> {
       margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.brickEmber.withOpacity(0.08),
+        color: AppColors.brickEmber.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.brickEmber.withOpacity(0.3)),
+        border: Border.all(color: AppColors.brickEmber.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -239,28 +315,28 @@ class _PurchasesPageState extends State<PurchasesPage> {
       children: [
         Expanded(
           child: _statCard(
-            title: 'Total Dépenses Achats',
+            title: 'Volume Total Achats & Charges',
             value: formatMoney(_totalAchats),
-            icon: Icons.shopping_cart_rounded,
-            iconColor: const Color(0xFFEA580C),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _statCard(
-            title: 'Factures d\'Achat',
-            value: '${_invoices.length}',
-            icon: Icons.receipt_long_rounded,
+            icon: Icons.trending_down_rounded,
             iconColor: const Color(0xFF2563EB),
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
           child: _statCard(
-            title: 'Dépense Moyenne',
-            value: formatMoney(_depenseMoyenne),
-            icon: Icons.pie_chart_outline_rounded,
-            iconColor: const Color(0xFF0D9488),
+            title: 'Total Règlements Décaissés',
+            value: formatMoney(_totalRegle),
+            icon: Icons.payments_rounded,
+            iconColor: const Color(0xFF10B981),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _statCard(
+            title: 'Dettes Fournisseurs Restantes',
+            value: formatMoney(_totalDettes),
+            icon: Icons.pending_actions_rounded,
+            iconColor: const Color(0xFFE11D48),
           ),
         ),
       ],
@@ -281,7 +357,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
         border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -293,7 +369,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.12),
+              color: iconColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, size: 20, color: iconColor),
@@ -319,7 +395,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
         border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -341,48 +417,150 @@ class _PurchasesPageState extends State<PurchasesPage> {
                         color: Color(0xFF374151),
                       ),
                       dataTextStyle: const TextStyle(fontSize: 13, color: Color(0xFF1F2937)),
-                      columnSpacing: 28,
+                      columnSpacing: 24,
                       columns: const [
-                        DataColumn(label: Text('N° Facture')),
+                        DataColumn(label: Text('Type')),
+                        DataColumn(label: Text('N° Interne')),
+                        DataColumn(label: Text('N° Fournisseur')),
                         DataColumn(label: Text('Date')),
                         DataColumn(label: Text('Fournisseur')),
-                        DataColumn(label: Text('Désignation / Motif')),
-                        DataColumn(label: Text('Montant (TTC)'), numeric: true),
+                        DataColumn(label: Text('Département')),
+                        DataColumn(label: Text('Compte / Charge')),
+                        DataColumn(label: Text('Mode')),
+                        DataColumn(label: Text('Montant'), numeric: true),
+                        DataColumn(label: Text('Réglé'), numeric: true),
+                        DataColumn(label: Text('Reste'), numeric: true),
+                        DataColumn(label: Text('Actions')),
                       ],
                       rows: _invoices.map((f) {
                         return DataRow(
                           cells: [
                             DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: f.isCharge ? Colors.purple.shade50 : Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  f.isCharge ? 'Charge' : 'Achat',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: f.isCharge ? Colors.purple.shade700 : Colors.blue.shade700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(
                               Row(
                                 children: [
-                                  const Icon(Icons.receipt_outlined, size: 16, color: Color(0xFFEA580C)),
+                                  const Icon(Icons.receipt_outlined, size: 16, color: Color(0xFF2563EB)),
                                   const SizedBox(width: 6),
                                   Text(f.numFacture, style: const TextStyle(fontWeight: FontWeight.w600)),
                                 ],
                               ),
                             ),
+                            // N° Facture Fournisseur (référence externe)
+                            DataCell(
+                              f.numFactureFournisseur != null && f.numFactureFournisseur!.isNotEmpty
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.receipt_long_outlined, size: 14, color: Color(0xFF6B7280)),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          f.numFactureFournisseur!,
+                                          style: const TextStyle(fontSize: 12, color: Color(0xFF374151)),
+                                        ),
+                                      ],
+                                    )
+                                  : const Text('—', style: TextStyle(color: Color(0xFF9CA3AF))),
+                            ),
                             DataCell(Text(formatDate(f.dateFacture))),
                             DataCell(
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(f.fournisseurNom ?? '—', style: const TextStyle(fontWeight: FontWeight.w500)),
-                                  if (f.fournisseurTelephone != null)
-                                    Text(f.fournisseurTelephone!, style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))),
-                                ],
+                              InkWell(
+                                onTap: () => _openFicheFournisseur(f.tiersId),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(f.fournisseurNom ?? '—', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF2563EB))),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.open_in_new, size: 12, color: Color(0xFF2563EB)),
+                                      ],
+                                    ),
+                                    if (f.fournisseurTelephone != null)
+                                      Text(f.fournisseurTelephone!, style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))),
+                                  ],
+                                ),
                               ),
                             ),
-                            DataCell(
-                              Text(f.designation ?? '—', overflow: TextOverflow.ellipsis),
-                            ),
+                            DataCell(Text(f.departementNom ?? '—')),
+                            DataCell(Text(f.compteLibelle ?? '—', overflow: TextOverflow.ellipsis)),
+                            DataCell(Text(f.modePaiement ?? '—')),
                             DataCell(
                               Text(
                                 formatMoney(f.montant),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFFEA580C),
+                                style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                formatMoney(f.montantRegle),
+                                style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF10B981)),
+                              ),
+                            ),
+                            DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: f.isSoldee ? Colors.green.shade50 : Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
+                                child: Text(
+                                  f.isSoldee ? 'Soldée' : formatMoney(f.resteAPayer),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: f.isSoldee ? Colors.green.shade700 : Colors.red.shade700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Bouton Fiche Fournisseur
+                                  IconButton(
+                                    icon: const Icon(Icons.assignment_ind_outlined, size: 18, color: Color(0xFF2563EB)),
+                                    tooltip: 'Fiche Fournisseur & Situation',
+                                    onPressed: () => _openFicheFournisseur(f.tiersId),
+                                  ),
+                                  // Bouton Versement
+                                  IconButton(
+                                    icon: const Icon(Icons.add_card_rounded, size: 18, color: Color(0xFF10B981)),
+                                    tooltip: 'Versement Fournisseur',
+                                    onPressed: () => _openVersementFournisseur(f.tiersId),
+                                  ),
+                                  // Bouton Régler
+                                  if (!f.isSoldee)
+                                    ElevatedButton(
+                                      onPressed: () => _openReglerFacture(f),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF2563EB),
+                                        foregroundColor: Colors.white,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                      ),
+                                      child: const Text('Régler', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                                    ),
+                                ],
                               ),
                             ),
                           ],
@@ -401,27 +579,27 @@ class _PurchasesPageState extends State<PurchasesPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.shopping_cart_outlined, size: 52, color: Colors.grey.shade400),
+            Icon(Icons.shopping_cart_rounded, size: 52, color: Colors.grey.shade400),
             const SizedBox(height: 14),
             const Text(
-              'Aucune facture d\'achat',
+              'Aucune facture d\'achat ou charge',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Color(0xFF1F2937)),
             ),
             const SizedBox(height: 6),
             const Text(
-              'Créez votre première facture d\'achat auprès d\'un fournisseur.',
+              'Créez votre première facture d\'achat ou enregistrez une charge.',
               style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
             ),
             const SizedBox(height: 18),
             ElevatedButton.icon(
               onPressed: _newInvoice,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEA580C),
+                backgroundColor: const Color(0xFF2563EB),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Nouvelle Facture Achat'),
+              label: const Text('Nouvel Achat / Charge'),
             ),
           ],
         ),

@@ -24,7 +24,9 @@ class UserDataSource {
       "SELECT ID, USERNAME, ROLE, IS_ACTIVE, CAN_SEE_ALL_CAISSES, "
       "CAN_CREATE_MOV, CAN_UPDATE_MOV, CAN_DELETE_MOV, CAN_MANAGE_COMPTES, CAN_VIEW_JOURNAL_SUPPR, CAN_VIEW_OLD_SOLDE, "
       "CAN_VIEW_CUSTOMERS, CAN_VIEW_PRODUCTS, CAN_VIEW_SALES, CAN_VIEW_PURCHASES, CAN_VIEW_STOCK, CAN_VIEW_ACCOUNTING, "
-      "CAN_VALIDATE_TRANSFERT, CAN_DELETE_BANK_RULES "
+      "CAN_VALIDATE_TRANSFERT, CAN_DELETE_BANK_RULES, "
+      "CAN_VIEW_CHARGES, CAN_CREATE_CHARGES, CAN_UPDATE_CHARGES, CAN_DELETE_CHARGES, "
+      "CAN_VIEW_REMISES, CAN_CREATE_REMISES, CAN_UPDATE_REMISES, CAN_DELETE_REMISES "
       "FROM USERS WHERE USERNAME = '$safeUsername' AND PASSWORD_HASH = '$safeHash' AND IS_ACTIVE = 'O'",
     );
 
@@ -53,6 +55,14 @@ class UserDataSource {
         canViewAccounting: rowVal(row['CAN_VIEW_ACCOUNTING']) != 'N',
         canValidateTransfert: rowVal(row['CAN_VALIDATE_TRANSFERT']) == 'O',
         canDeleteBankRules: rowVal(row['CAN_DELETE_BANK_RULES']) == 'O',
+        canViewCharges: rowVal(row['CAN_VIEW_CHARGES']) != 'N',
+        canCreateCharges: rowVal(row['CAN_CREATE_CHARGES']) != 'N',
+        canUpdateCharges: rowVal(row['CAN_UPDATE_CHARGES']) != 'N',
+        canDeleteCharges: rowVal(row['CAN_DELETE_CHARGES']) == 'O',
+        canViewRemises: rowVal(row['CAN_VIEW_REMISES']) != 'N',
+        canCreateRemises: rowVal(row['CAN_CREATE_REMISES']) != 'N',
+        canUpdateRemises: rowVal(row['CAN_UPDATE_REMISES']) != 'N',
+        canDeleteRemises: rowVal(row['CAN_DELETE_REMISES']) == 'O',
         assignedCaisseIds: assignedCaisses,
       );
     }
@@ -68,7 +78,9 @@ class UserDataSource {
       "SELECT ID, USERNAME, ROLE, IS_ACTIVE, CAN_SEE_ALL_CAISSES, "
       "CAN_CREATE_MOV, CAN_UPDATE_MOV, CAN_DELETE_MOV, CAN_MANAGE_COMPTES, CAN_VIEW_JOURNAL_SUPPR, CAN_VIEW_OLD_SOLDE, "
       "CAN_VIEW_CUSTOMERS, CAN_VIEW_PRODUCTS, CAN_VIEW_SALES, CAN_VIEW_PURCHASES, CAN_VIEW_STOCK, CAN_VIEW_ACCOUNTING, "
-      "CAN_VALIDATE_TRANSFERT, CAN_DELETE_BANK_RULES "
+      "CAN_VALIDATE_TRANSFERT, CAN_DELETE_BANK_RULES, "
+      "CAN_VIEW_CHARGES, CAN_CREATE_CHARGES, CAN_UPDATE_CHARGES, CAN_DELETE_CHARGES, "
+      "CAN_VIEW_REMISES, CAN_CREATE_REMISES, CAN_UPDATE_REMISES, CAN_DELETE_REMISES "
       "FROM USERS ORDER BY USERNAME ASC",
     );
 
@@ -97,6 +109,14 @@ class UserDataSource {
           canViewAccounting: (rowVal(r['CAN_VIEW_ACCOUNTING']) != 'N'),
           canValidateTransfert: (rowVal(r['CAN_VALIDATE_TRANSFERT']) == 'O'),
           canDeleteBankRules: (rowVal(r['CAN_DELETE_BANK_RULES']) == 'O'),
+          canViewCharges: (rowVal(r['CAN_VIEW_CHARGES']) != 'N'),
+          canCreateCharges: (rowVal(r['CAN_CREATE_CHARGES']) != 'N'),
+          canUpdateCharges: (rowVal(r['CAN_UPDATE_CHARGES']) != 'N'),
+          canDeleteCharges: (rowVal(r['CAN_DELETE_CHARGES']) == 'O'),
+          canViewRemises: (rowVal(r['CAN_VIEW_REMISES']) != 'N'),
+          canCreateRemises: (rowVal(r['CAN_CREATE_REMISES']) != 'N'),
+          canUpdateRemises: (rowVal(r['CAN_UPDATE_REMISES']) != 'N'),
+          canDeleteRemises: (rowVal(r['CAN_DELETE_REMISES']) == 'O'),
           assignedCaisseIds: assignedCaisses,
         ),
       );
@@ -134,6 +154,14 @@ class UserDataSource {
     bool canViewAccounting = true,
     bool canValidateTransfert = true,
     bool canDeleteBankRules = false,
+    bool canViewCharges = true,
+    bool canCreateCharges = true,
+    bool canUpdateCharges = true,
+    bool canDeleteCharges = false,
+    bool canViewRemises = true,
+    bool canCreateRemises = true,
+    bool canUpdateRemises = true,
+    bool canDeleteRemises = false,
     List<String> assignedCaisseIds = const [],
   }) async {
     _ensureConnected();
@@ -157,18 +185,30 @@ class UserDataSource {
     final viewAcct = canViewAccounting ? 'O' : 'N';
     final valTrans = canValidateTransfert ? 'O' : 'N';
     final delRules = canDeleteBankRules ? 'O' : 'N';
+    final vChg = canViewCharges ? 'O' : 'N';
+    final cChg = canCreateCharges ? 'O' : 'N';
+    final uChg = canUpdateCharges ? 'O' : 'N';
+    final dChg = canDeleteCharges ? 'O' : 'N';
+    final vRem = canViewRemises ? 'O' : 'N';
+    final cRem = canCreateRemises ? 'O' : 'N';
+    final uRem = canUpdateRemises ? 'O' : 'N';
+    final dRem = canDeleteRemises ? 'O' : 'N';
 
     await conn.execute('''
       INSERT INTO USERS (
         ID, USERNAME, PASSWORD_HASH, ROLE, IS_ACTIVE,
         CAN_SEE_ALL_CAISSES, CAN_CREATE_MOV, CAN_UPDATE_MOV, CAN_DELETE_MOV, CAN_MANAGE_COMPTES, CAN_VIEW_JOURNAL_SUPPR, CAN_VIEW_OLD_SOLDE,
         CAN_VIEW_CUSTOMERS, CAN_VIEW_PRODUCTS, CAN_VIEW_SALES, CAN_VIEW_PURCHASES, CAN_VIEW_STOCK, CAN_VIEW_ACCOUNTING,
-        CAN_VALIDATE_TRANSFERT, CAN_DELETE_BANK_RULES
+        CAN_VALIDATE_TRANSFERT, CAN_DELETE_BANK_RULES,
+        CAN_VIEW_CHARGES, CAN_CREATE_CHARGES, CAN_UPDATE_CHARGES, CAN_DELETE_CHARGES,
+        CAN_VIEW_REMISES, CAN_CREATE_REMISES, CAN_UPDATE_REMISES, CAN_DELETE_REMISES
       ) VALUES (
         '$id', '$safeUsername', '$passwordHash', '$role', 'O',
         '$seeAll', '$crtMov', '$updMov', '$delMov', '$mngCmp', '$viewJrn', '$viewOld',
         '$viewCust', '$viewProd', '$viewSale', '$viewPurc', '$viewStk', '$viewAcct',
-        '$valTrans', '$delRules'
+        '$valTrans', '$delRules',
+        '$vChg', '$cChg', '$uChg', '$dChg',
+        '$vRem', '$cRem', '$uRem', '$dRem'
       )
     ''');
 
@@ -202,6 +242,14 @@ class UserDataSource {
     bool canViewAccounting = true,
     bool canValidateTransfert = true,
     bool canDeleteBankRules = false,
+    bool canViewCharges = true,
+    bool canCreateCharges = true,
+    bool canUpdateCharges = true,
+    bool canDeleteCharges = false,
+    bool canViewRemises = true,
+    bool canCreateRemises = true,
+    bool canUpdateRemises = true,
+    bool canDeleteRemises = false,
     List<String>? assignedCaisseIds,
     String? newPassword,
   }) async {
@@ -224,6 +272,14 @@ class UserDataSource {
     final viewAcctSql = canViewAccounting ? 'O' : 'N';
     final valTransSql = canValidateTransfert ? 'O' : 'N';
     final delRulesSql = canDeleteBankRules ? 'O' : 'N';
+    final vChgSql = canViewCharges ? 'O' : 'N';
+    final cChgSql = canCreateCharges ? 'O' : 'N';
+    final uChgSql = canUpdateCharges ? 'O' : 'N';
+    final dChgSql = canDeleteCharges ? 'O' : 'N';
+    final vRemSql = canViewRemises ? 'O' : 'N';
+    final cRemSql = canCreateRemises ? 'O' : 'N';
+    final uRemSql = canUpdateRemises ? 'O' : 'N';
+    final dRemSql = canDeleteRemises ? 'O' : 'N';
 
     final updateFields = '''
       ROLE = '$role',
@@ -243,6 +299,14 @@ class UserDataSource {
       CAN_VIEW_ACCOUNTING = '$viewAcctSql',
       CAN_VALIDATE_TRANSFERT = '$valTransSql',
       CAN_DELETE_BANK_RULES = '$delRulesSql',
+      CAN_VIEW_CHARGES = '$vChgSql',
+      CAN_CREATE_CHARGES = '$cChgSql',
+      CAN_UPDATE_CHARGES = '$uChgSql',
+      CAN_DELETE_CHARGES = '$dChgSql',
+      CAN_VIEW_REMISES = '$vRemSql',
+      CAN_CREATE_REMISES = '$cRemSql',
+      CAN_UPDATE_REMISES = '$uRemSql',
+      CAN_DELETE_REMISES = '$dRemSql',
       UPDATED_AT = CURRENT_TIMESTAMP
     ''';
 

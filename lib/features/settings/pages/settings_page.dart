@@ -1,8 +1,11 @@
+import 'general_settings_tab.dart';
+import 'departements_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import '../../accounting/pages/bank_rules_page.dart';
 import 'developer_mode_tab.dart';
+import 'client_migration_tab.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -17,11 +20,13 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _isDevModeUnlocked = false;
 
   List<_SettingsTab> get _currentTabs => [
-        const _SettingsTab(
-            icon: Icons.gavel_rounded, label: 'Règles Bancaires'),
-        if (_isDevModeUnlocked)
-          const _SettingsTab(
-              icon: Icons.terminal_rounded, label: 'Mode Développeur'),
+        const _SettingsTab(icon: Icons.tune_rounded, label: 'Paramètres Généraux'),
+        const _SettingsTab(icon: Icons.apartment_rounded, label: 'Départements'),
+        const _SettingsTab(icon: Icons.gavel_rounded, label: 'Règles Bancaires'),
+        if (_isDevModeUnlocked) ...[
+          const _SettingsTab(icon: Icons.system_update_rounded, label: 'Mises à Jour BDD'),
+          const _SettingsTab(icon: Icons.terminal_rounded, label: 'Mode Développeur'),
+        ],
       ];
 
   @override
@@ -33,7 +38,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void _unlockDevMode() {
     setState(() {
       _isDevModeUnlocked = true;
-      _activeTabIndex = 1; // Direct jump to Developer tab
+      _activeTabIndex = 3; // Direct jump to Mises à Jour BDD
     });
   }
 
@@ -107,7 +112,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ),
                                 SizedBox(height: 2),
                                 Text(
-                                  'Veuillez entrer le mot de passe administrateur',
+                                  'Authentification requise pour cette section',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Color(0xFF64748B),
@@ -118,54 +123,40 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: errorText != null
-                                ? const Color(0xFFDC2626)
-                                : const Color(0xFFCBD5E1),
-                          ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Mot de passe :',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF334155),
                         ),
-                        child: TextField(
-                          controller: passwordController,
-                          obscureText: obscure,
-                          autofocus: true,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF0F172A),
-                          ),
-                          onSubmitted: (_) => submit(),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            hintText: 'Mot de passe...',
-                            hintStyle: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF94A3B8),
-                            ),
-                            prefixIcon: const Icon(
-                              Icons.lock_outline_rounded,
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: obscure,
+                        autofocus: true,
+                        onSubmitted: (_) => submit(),
+                        decoration: InputDecoration(
+                          hintText: 'Entrez le mot de passe...',
+                          prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscure
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
                               size: 18,
-                              color: Color(0xFF64748B),
                             ),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                obscure
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                                size: 18,
-                                color: const Color(0xFF64748B),
-                              ),
-                              onPressed: () =>
-                                  setDialogState(() => obscure = !obscure),
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 12,
-                            ),
+                            onPressed: () => setDialogState(() => obscure = !obscure),
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
                           ),
                         ),
                       ),
@@ -249,132 +240,74 @@ class _SettingsPageState extends State<SettingsPage> {
       autofocus: true,
       onKeyEvent: _handleKeyEvent,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Header ──────────────────────────────────────────────────
+          // ── Tab Bar Navigation ───────────────────────────────────────
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(32, 24, 32, 0),
-            color: Colors.white,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE4E4E7), width: 1),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF4F4F5),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.settings_rounded,
-                          color: Color(0xFF18181B), size: 22),
-                    ),
-                    const SizedBox(width: 14),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Paramètres',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF09090B),
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        Text(
-                          'Configuration du système et des règles métier',
-                          style: TextStyle(
-                              fontSize: 12, color: Color(0xFF71717A)),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    if (_isDevModeUnlocked)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFFBFDBFE)),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.lock_open_rounded,
-                                size: 14, color: Color(0xFF2563EB)),
-                            SizedBox(width: 6),
-                            Text(
-                              'Dev Mode Actif',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF2563EB),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: List.generate(tabs.length, (index) {
+                        final tab = tabs[index];
+                        final isSelected = _activeTabIndex == index;
+
+                        return InkWell(
+                          onTap: () => setState(() => _activeTabIndex = index),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: isSelected
+                                      ? const Color(0xFF2563EB)
+                                      : Colors.transparent,
+                                  width: 2.5,
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // ── Tab Navigation Bar ─────────────────────────────────
-                Container(
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: Color(0xFFE4E4E7), width: 1),
-                    ),
-                  ),
-                  child: Row(
-                    children: List.generate(tabs.length, (index) {
-                      final tab = tabs[index];
-                      final isSelected = _activeTabIndex == index;
-
-                      return InkWell(
-                        onTap: () => setState(() => _activeTabIndex = index),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: isSelected
-                                    ? const Color(0xFF2563EB)
-                                    : Colors.transparent,
-                                width: 2.5,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                tab.icon,
-                                size: 16,
-                                color: isSelected
-                                    ? const Color(0xFF2563EB)
-                                    : const Color(0xFF71717A),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                tab.label,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  tab.icon,
+                                  size: 16,
                                   color: isSelected
                                       ? const Color(0xFF2563EB)
                                       : const Color(0xFF71717A),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 8),
+                                Text(
+                                  tab.label,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                    color: isSelected
+                                        ? const Color(0xFF2563EB)
+                                        : const Color(0xFF71717A),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    }),
+                        );
+                      }),
+                    ),
                   ),
                 ),
               ],
@@ -383,17 +316,28 @@ class _SettingsPageState extends State<SettingsPage> {
 
           // ── Tab Content ──────────────────────────────────────────────
           Expanded(
-            child: IndexedStack(
-              index: _activeTabIndex,
-              children: [
-                const BankRulesPage(),
-                if (_isDevModeUnlocked) const DeveloperModeTab(),
-              ],
-            ),
+            child: _buildTabBody(_activeTabIndex),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildTabBody(int index) {
+    switch (index) {
+      case 0:
+        return const GeneralSettingsTab();
+      case 1:
+        return const DepartementsPage();
+      case 2:
+        return const BankRulesPage();
+      case 3:
+        return _isDevModeUnlocked ? const ClientMigrationTab() : const SizedBox.shrink();
+      case 4:
+        return _isDevModeUnlocked ? const DeveloperModeTab() : const SizedBox.shrink();
+      default:
+        return const GeneralSettingsTab();
+    }
   }
 }
 

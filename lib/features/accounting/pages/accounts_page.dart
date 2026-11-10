@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme.dart';
+import '../../../app/theme.dart';
 import '../../../../core/database/database.dart';
 import '../../../../core/security/session.dart';
 import '../../../../data/datasources/finance_datasource.dart';

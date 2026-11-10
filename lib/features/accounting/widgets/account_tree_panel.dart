@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme.dart';
+import '../../../app/theme.dart';
 import '../../../../data/models/compte.dart';
 
 /// Left panel showing the accounts tree. Selecting a node filters the

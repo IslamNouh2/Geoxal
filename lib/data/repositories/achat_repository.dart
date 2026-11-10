@@ -12,35 +12,59 @@ class AchatRepository {
     DateTime? to,
     String? tiersId,
     String? searchQuery,
-  }) =>
-      _dataSource.getFacturesAchat(
-        from: from,
-        to: to,
-        tiersId: tiersId,
-        searchQuery: searchQuery,
-      );
+  }) {
+    return _dataSource.getFacturesAchat(
+      from: from,
+      to: to,
+      tiersId: tiersId,
+      searchQuery: searchQuery,
+    );
+  }
 
-  Future<String> getNextNumFacture() => _dataSource.generateNextNumFacture();
+  Future<String> getNextNumFacture() {
+    return _dataSource.generateNextNumFacture();
+  }
 
-  Future<FactureAchat> createFactureAchat({
+  /// Creates a new Facture Achat.
+  ///
+  /// If [numFacture] is null or empty the number is auto-generated via
+  /// [generateNextNumFacture] (used when a non-admin saves the form).
+  /// Admin users may supply a custom [numFacture].
+  ///
+  /// Returns the actual invoice number that was saved.
+  Future<String> createFactureAchat({
     required String tiersId,
-    required String numFacture,
+    String? numFacture,
+    String? numFactureFournisseur,
     required DateTime dateFacture,
     required double montant,
     String? designation,
     required String userId,
+    String? departementId,
+    String? compteId,
+    String? modePaiement,
+    String typeAchat = 'ACHAT',
   }) async {
-    final facture = FactureAchat(
+    // Auto-generate when not provided or blank (non-admin path)
+    final resolvedNum = (numFacture == null || numFacture.trim().isEmpty)
+        ? await _dataSource.generateNextNumFacture()
+        : numFacture.trim();
+
+    final fa = FactureAchat(
       id: Uuid.v4(),
       tiersId: tiersId,
-      numFacture: numFacture,
+      numFacture: resolvedNum,
+      numFactureFournisseur: numFactureFournisseur?.trim().isEmpty == true ? null : numFactureFournisseur?.trim(),
       dateFacture: dateFacture,
       montant: montant,
       designation: designation,
       userId: userId,
+      departementId: departementId,
+      compteId: compteId,
+      modePaiement: modePaiement,
+      typeAchat: typeAchat,
     );
-
-    await _dataSource.createFactureAchat(facture);
-    return facture;
+    await _dataSource.createFactureAchat(fa);
+    return resolvedNum;
   }
 }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/database/database.dart';
 import '../../../../core/security/session.dart';
+import '../../../../data/models/user.dart';
 import '../../../../data/datasources/user_datasource.dart';
 import '../../../../data/repositories/auth_repository.dart';
 
@@ -21,6 +23,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
   bool _loading = false;
   String? _errorMessage;
+  bool _showDevButton = false;
 
   @override
   void dispose() {
@@ -42,7 +45,9 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      debugPrint('[LOGIN] Checking DB connection status: ${Database.instance.connection.isConnected}');
+      debugPrint(
+        '[LOGIN] Checking DB connection status: ${Database.instance.connection.isConnected}',
+      );
       if (!Database.instance.connection.isConnected) {
         debugPrint('[LOGIN] DB not connected, calling init()...');
         await Database.instance.init();
@@ -67,7 +72,8 @@ class _LoginPageState extends State<LoginPage> {
         if (!mounted) return;
         setState(() {
           _loading = false;
-          _errorMessage = 'Identifiants invalides. Vérifiez le nom d\'utilisateur et le mot de passe.';
+          _errorMessage =
+              'Identifiants invalides. Vérifiez le nom d\'utilisateur et le mot de passe.';
         });
       }
     } catch (e, stack) {
@@ -81,153 +87,394 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _promptDevPassword() async {
+    final devPasswordController = TextEditingController();
+    String? devError;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void checkPassword() {
+              final entered = devPasswordController.text;
+              if (entered == 'Islam@dev2026') {
+                Navigator.of(dialogCtx).pop();
+                _handleDevLogin();
+              } else {
+                setDialogState(() {
+                  devError = 'Mot de passe incorrect.';
+                });
+              }
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              title: const Row(
+                children: [
+                  Icon(
+                    Icons.lock_person_rounded,
+                    color: Color(0xFF2563EB),
+                    size: 24,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Accès Développeur',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Entrez le mot de passe développeur pour continuer :',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: devPasswordController,
+                    obscureText: true,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'Mot de passe...',
+                      prefixIcon: const Icon(Icons.password_rounded, size: 20),
+                      errorText: devError,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                    ),
+                    onSubmitted: (_) => checkPassword(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton(
+                  onPressed: checkPassword,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('Valider'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _handleDevLogin() {
+    debugPrint('[LOGIN] Dev login triggered');
+    // Set developer admin session with full permissions
+    const devUser = User(
+      id: 'DEV-001',
+      username: 'Dev (Admin)',
+      role: 'ADMIN',
+      isActive: true,
+      canSeeAllCaisses: true,
+      canCreateMov: true,
+      canUpdateMov: true,
+      canDeleteMov: true,
+      canManageComptes: true,
+      canViewJournalSuppr: true,
+      canViewOldSolde: true,
+      canViewCustomers: true,
+      canViewProducts: true,
+      canViewSales: true,
+      canViewPurchases: true,
+      canViewStock: true,
+      canViewAccounting: true,
+      canValidateTransfert: true,
+      canDeleteBankRules: true,
+      canViewCharges: true,
+      canCreateCharges: true,
+      canUpdateCharges: true,
+      canDeleteCharges: true,
+      canViewRemises: true,
+      canCreateRemises: true,
+      canUpdateRemises: true,
+      canDeleteRemises: true,
+    );
+    Session.setUser(devUser);
+    context.go('/dashboard');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Card(
-                elevation: 16,
-                color: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(36),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // App Logo
-                        Center(
-                          child: Image.asset(
-                            'assets/images/Logo-2.png',
-                           width: 250,
-                            height: 80,
-                            fit: BoxFit.contain,
-                            alignment: Alignment.center,
-                          ),
-                        ),
-                       const SizedBox(height: 8),
-
-                      //  const Text(
-                      //     'Geoxal ERP',
-                      //     textAlign: TextAlign.center,
-                      //     style: TextStyle(
-                      //       fontSize: 24,
-                      //       fontWeight: FontWeight.w800,
-                      //       color: Color(0xFF1E293B),
-                      //       letterSpacing: -0.5,
-                      //     ),
-                      //   ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Connectez-vous à votre espace de gestion',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                        const SizedBox(height: 28),
-
-                        if (_errorMessage != null) ...[
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.red.shade200),
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyL, control: true): () {
+          setState(() {
+            _showDevButton = !_showDevButton;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                _showDevButton
+                    ? 'Mode Développeur activé'
+                    : 'Mode Développeur désactivé',
+              ),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              width: 260,
+            ),
+          );
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: const Color(0xFF0F172A),
+          body: Center(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Card(
+                    elevation: 16,
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(36),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // App Logo
+                            Center(
+                              child: Image.asset(
+                                'assets/images/Logo-2.png',
+                                width: 250,
+                                height: 80,
+                                fit: BoxFit.contain,
+                                alignment: Alignment.center,
+                              ),
                             ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.error_outline, size: 18, color: Colors.red.shade700),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _errorMessage!,
-                                    style: TextStyle(fontSize: 12, color: Colors.red.shade900),
+                            const SizedBox(height: 8),
+
+                            //  const Text(
+                            //     'Geoxal ERP',
+                            //     textAlign: TextAlign.center,
+                            //     style: TextStyle(
+                            //       fontSize: 24,
+                            //       fontWeight: FontWeight.w800,
+                            //       color: Color(0xFF1E293B),
+                            //       letterSpacing: -0.5,
+                            //     ),
+                            //   ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Connectez-vous à votre espace de gestion',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+
+                            if (_errorMessage != null) ...[
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.red.shade200,
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // Username
-                        const Text(
-                          'Nom d\'utilisateur',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
-                        ),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _usernameController,
-                          decoration: InputDecoration(
-                            hintText: 'admin',
-                            prefixIcon: const Icon(Icons.person_outline, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          ),
-                          validator: (v) => v == null || v.trim().isEmpty ? 'Nom d\'utilisateur requis' : null,
-                        ),
-
-                        const SizedBox(height: 18),
-
-                        // Password
-                        const Text(
-                          'Mot de passe',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
-                        ),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          decoration: InputDecoration(
-                            hintText: '••••••••',
-                            prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                                size: 20,
-                              ),
-                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                            ),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          ),
-                          validator: (v) => v == null || v.trim().isEmpty ? 'Mot de passe requis' : null,
-                        ),
-
-                        const SizedBox(height: 26),
-
-                        // Login button
-                        ElevatedButton(
-                          onPressed: _loading ? null : _handleLogin,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2563EB),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            elevation: 2,
-                          ),
-                          child: _loading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Text(
-                                  'Se connecter',
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      size: 18,
+                                      color: Colors.red.shade700,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _errorMessage!,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.red.shade900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
+
+                            // Username
+                            const Text(
+                              'Nom d\'utilisateur',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF334155),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _usernameController,
+                              decoration: InputDecoration(
+                                hintText: 'admin',
+                                prefixIcon: const Icon(
+                                  Icons.person_outline,
+                                  size: 20,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                              ),
+                              validator: (v) => v == null || v.trim().isEmpty
+                                  ? 'Nom d\'utilisateur requis'
+                                  : null,
+                            ),
+
+                            const SizedBox(height: 18),
+
+                            // Password
+                            const Text(
+                              'Mot de passe',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF334155),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              decoration: InputDecoration(
+                                hintText: '••••••••',
+                                prefixIcon: const Icon(
+                                  Icons.lock_outline,
+                                  size: 20,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 20,
+                                  ),
+                                  onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                              ),
+                              validator: (v) => v == null || v.trim().isEmpty
+                                  ? 'Mot de passe requis'
+                                  : null,
+                            ),
+
+                            const SizedBox(height: 26),
+
+                            // Login button
+                            ElevatedButton(
+                              onPressed: _loading ? null : _handleLogin,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 2,
+                              ),
+                              child: _loading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Se connecter',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                            ),
+
+                            if (_showDevButton) ...[
+                              const SizedBox(height: 16),
+
+                              // Dev bypass button (visible uniquement via Ctrl + L)
+                              OutlinedButton.icon(
+                                onPressed: _promptDevPassword,
+                                icon: const Icon(
+                                  Icons.developer_mode_rounded,
+                                  size: 18,
+                                  color: Color(0xFF4338CA),
+                                ),
+                                label: const Text(
+                                  'Accès Développeur (Sans login)',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF4338CA),
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF4338CA),
+                                  backgroundColor: const Color(0xFFEEF2FF),
+                                  side: const BorderSide(
+                                    color: Color(0xFFC7D2FE),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

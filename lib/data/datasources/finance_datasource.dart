@@ -107,7 +107,7 @@ class FinanceDataSource {
     final whereSql = conditions.isEmpty ? '' : ' WHERE ${conditions.join(' AND ')}';
     final query = '''
       SELECT M.ID, M.DATE_MOV, M.COMPTE_SOURCE_ID, M.COMPTE_DEST_ID, M.MONTANT, M.DESIGNATION, M.USER_ID,
-             M.MODE_PAIEMENT, M.NUM_CHEQUE, M.DATE_CHEQUE, M.TAUX_CHANGE, M.MONTANT_DEVISE,
+             M.MODE_PAIEMENT, M.NUM_CHEQUE, M.DATE_CHEQUE, M.TAUX_CHANGE, M.MONTANT_DEVISE, M.REGLEMENT_ID, M.ORIGINE_MODULE,
              SRC.CODE AS SRC_CODE, SRC.LIBELLE AS SRC_LIBELLE,
              DST.CODE AS DST_CODE, DST.LIBELLE AS DST_LIBELLE
       FROM MOVEMENTS_TRISOIR M
@@ -133,6 +133,8 @@ class FinanceDataSource {
         dateCheque: r['DATE_CHEQUE'] != null ? _parseDate(r['DATE_CHEQUE']) : null,
         tauxChange: double.tryParse(r['TAUX_CHANGE']?.toString().trim() ?? ''),
         montantDevise: double.tryParse(r['MONTANT_DEVISE']?.toString().trim() ?? ''),
+        reglementId: r['REGLEMENT_ID']?.toString().trim(),
+        origineModule: r['ORIGINE_MODULE']?.toString().trim(),
         sourceCode: r['SRC_CODE']?.toString().trim(),
         sourceLibelle: r['SRC_LIBELLE']?.toString().trim(),
         destCode: r['DST_CODE']?.toString().trim(),

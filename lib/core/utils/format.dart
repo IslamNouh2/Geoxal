@@ -4,6 +4,9 @@ String _pad4(int v) => v.toString().padLeft(4, '0');
 /// 'yyyy-MM-dd HH:mm:ss' for binding parameters as Firebird TIMESTAMP strings.
 String toSqlDateTime(DateTime d) => '${_pad4(d.year)}-${_pad2(d.month)}-${_pad2(d.day)} 00:00:00';
 
+/// 'yyyy-MM-dd' for Firebird DATE fields (no time component to prevent error -413).
+String toSqlDateOnly(DateTime d) => '${_pad4(d.year)}-${_pad2(d.month)}-${_pad2(d.day)}';
+
 /// 'dd/MM/yyyy' for display.
 String formatDate(DateTime d) => '${_pad2(d.day)}/${_pad2(d.month)}/${d.year}';
 

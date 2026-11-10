@@ -6,6 +6,8 @@ import '../../features/accounting/pages/accounting_page.dart';
 import '../../features/accounting/pages/accounts_page.dart';
 import '../../features/accounting/pages/remises_cheques_page.dart';
 import '../../features/auth/pages/login_page.dart';
+import '../../features/charges/pages/charges_page.dart';
+import '../../features/charges/pages/charge_reports_page.dart';
 import '../../features/customers/pages/customers_page.dart';
 import '../../features/dashboard/pages/dashboard.dart';
 import '../../features/purchases/pages/purchases_page.dart';
@@ -124,6 +126,24 @@ class AppRouter {
             },
           ),
 
+          // Gestion des Charges
+          GoRoute(
+            path: '/charges',
+            name: 'charges',
+            builder: (context, state) {
+              return const ChargesPage();
+            },
+          ),
+
+          // Rapports des Charges
+          GoRoute(
+            path: '/charges/reports',
+            name: 'charges-reports',
+            builder: (context, state) {
+              return const ChargeReportsPage();
+            },
+          ),
+
           // Users (User Management & Permissions)
           GoRoute(
             path: '/users',
@@ -175,6 +195,12 @@ class AppRouter {
 
       case '/remises-cheques':
         return 'Remise de Chèques';
+
+      case '/charges':
+        return 'Gestion des Charges';
+
+      case '/charges/reports':
+        return 'Rapports des Charges';
 
       case '/users':
         return 'Gestion des Utilisateurs';

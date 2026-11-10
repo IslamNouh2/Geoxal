@@ -88,7 +88,7 @@ class Sidebar extends StatelessWidget {
                       route: '/accounting',
                     ),
 
-                  if (Session.user?.hasViewAccountingPermission ?? true)
+                  if ((Session.user?.hasViewAccountingPermission ?? true) && (Session.user?.hasViewRemisesPermission ?? true))
                     _menuItem(
                       context,
                       icon: Icons.receipt_long_rounded,
@@ -103,6 +103,22 @@ class Sidebar extends StatelessWidget {
                       icon: Icons.account_tree_rounded,
                       title: 'Comptes',
                       route: '/accounts',
+                    ),
+
+                  if ((Session.user?.hasViewAccountingPermission ?? true) && (Session.user?.hasViewChargesPermission ?? true))
+                    _menuItem(
+                      context,
+                      icon: Icons.request_quote_rounded,
+                      title: 'Charges',
+                      route: '/charges',
+                    ),
+
+                  if ((Session.user?.hasViewAccountingPermission ?? true) && (Session.user?.hasViewChargesPermission ?? true))
+                    _menuItem(
+                      context,
+                      icon: Icons.analytics_rounded,
+                      title: 'Rapports Charges',
+                      route: '/charges/reports',
                     ),
 
                   _sectionTitle('System'),
